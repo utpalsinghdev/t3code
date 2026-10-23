@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ChatComposerProps } from "./ChatComposer";
 import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -31,6 +32,7 @@ import type { useComposerProviderModel } from "./useComposerProviderModel";
  * blocks that do not fit. Rendered in the expanded footer or the resting controls host.
  */
 export function ComposerControlsBar(props: {
+  usageControls: ReactNode;
   environmentId: EnvironmentId;
   routeKind: ChatComposerProps["routeKind"];
   routeThreadRef: ChatComposerProps["routeThreadRef"];
@@ -324,6 +326,7 @@ export function ComposerControlsBar(props: {
             onRuntimeModeChange={handleRuntimeModeChange}
           />
         </div>
+        {props.usageControls}
       </>
     </>
   );

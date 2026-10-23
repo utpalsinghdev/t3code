@@ -8,6 +8,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { BotIcon, PencilRulerIcon } from "lucide-react";
 import { type ComponentProps, memo } from "react";
 
+import { cn } from "~/lib/utils";
 import type { ContextWindowSnapshot } from "../../lib/contextWindow";
 import { Select, SelectItem, SelectPopup, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -15,6 +16,7 @@ import {
   ComposerControl,
   ComposerControlIcon,
   ComposerControlSeparator,
+  type ComposerControlSize,
   ComposerSelectControl,
 } from "./ComposerControl";
 import { useComposerMenuProps } from "./composerEventScope";
@@ -147,14 +149,76 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
   );
 });
 
-export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
-  compact: boolean;
-  canOperateThread: boolean;
+export const ComposerUsageControls = memo(function ComposerUsageControls(props: {
+  size: ComposerControlSize;
+  hidden: boolean;
   activeContextWindow: ContextWindowSnapshot | null;
   contextWindowMeterEnabled: boolean;
   completedTurnTokensPerSecond: number | null;
   reserveContextWindowMeter: boolean;
   activeThreadModelDisplayName: string | null;
+  onCompactContext?: (() => void) | undefined;
+  compactDisabled: boolean;
+  compactDisabledReason: string | null;
+}) {
+  return (
+    <div data-resting-controls-usage className="flex shrink-0 items-center gap-1">
+      {props.contextWindowMeterEnabled ? (
+        <>
+          <ComposerControlSeparator size={props.size} />
+          {!props.activeContextWindow && props.reserveContextWindowMeter ? (
+            <ContextWindowMeterPlaceholder size={props.size} />
+          ) : (
+            <ContextWindowMeter
+              size={props.size}
+              hidden={props.hidden}
+              usage={props.activeContextWindow}
+              modelDisplayName={props.activeThreadModelDisplayName}
+              onCompact={props.onCompactContext}
+              compactDisabled={props.compactDisabled}
+              compactDisabledReason={props.compactDisabledReason}
+            />
+          )}
+        </>
+      ) : null}
+      <ComposerControlSeparator size={props.size} />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              tabIndex={0}
+              className={cn(
+                "inline-flex shrink-0 items-center whitespace-nowrap rounded-sm font-medium tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                props.size === "xs" ? "h-7 text-2xs sm:h-6" : "h-7 text-xs",
+                props.completedTurnTokensPerSecond === null
+                  ? "text-muted-foreground"
+                  : "text-success-foreground",
+              )}
+            />
+          }
+        >
+          {props.completedTurnTokensPerSecond === null
+            ? "-"
+            : props.completedTurnTokensPerSecond > 0 && props.completedTurnTokensPerSecond < 0.1
+              ? "<0.1"
+              : props.completedTurnTokensPerSecond.toLocaleString("en-US", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+          tok/s
+        </TooltipTrigger>
+        <TooltipPopup side="top">
+          {props.completedTurnTokensPerSecond === null
+            ? "Available after a completed turn reports output tokens and timing."
+            : "Average output tokens per second for the latest completed turn, including reasoning, tool calls, and waiting. Updates when a turn completes."}
+        </TooltipPopup>
+      </Tooltip>
+    </div>
+  );
+});
+
+export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(props: {
+  compact: boolean;
+  canOperateThread: boolean;
   isPreparingWorktree: boolean;
   pendingAction: {
     questionIndex: number;
@@ -183,82 +247,40 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
   onPreviousPendingQuestion: () => void;
   onInterrupt: () => void;
   onImplementPlanInNewThread: () => void;
-  onCompactContext?: (() => void) | undefined;
-  compactDisabled: boolean;
-  compactDisabledReason: string | null;
   compactBeforeSendTokens: number | null;
   keepFullHistory: boolean;
   onToggleKeepFullHistory: () => void;
 }) {
   return (
-    <>
-      {props.contextWindowMeterEnabled &&
-      !props.activeContextWindow &&
-      props.reserveContextWindowMeter ? (
-        <ContextWindowMeterPlaceholder />
-      ) : props.contextWindowMeterEnabled ? (
-        <ContextWindowMeter
-          usage={props.activeContextWindow}
-          modelDisplayName={props.activeThreadModelDisplayName}
-          onCompact={props.onCompactContext}
-          compactDisabled={props.compactDisabled}
-          compactDisabledReason={props.compactDisabledReason}
-        />
-      ) : null}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              tabIndex={0}
-              className={`shrink-0 whitespace-nowrap rounded-sm text-2xs font-medium tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${props.completedTurnTokensPerSecond === null ? "text-muted-foreground" : "text-success-foreground"}`}
-            />
-          }
-        >
-          {props.completedTurnTokensPerSecond === null
-            ? "N/A"
-            : props.completedTurnTokensPerSecond > 0 && props.completedTurnTokensPerSecond < 0.1
-              ? "<0.1"
-              : props.completedTurnTokensPerSecond.toLocaleString("en-US", {
-                  maximumFractionDigits: 1,
-                })}{" "}
-          TOK/s
-        </TooltipTrigger>
-        <TooltipPopup side="top">
-          {props.completedTurnTokensPerSecond === null
-            ? "Available after a completed turn reports output tokens and timing."
-            : "Average output tokens per second for the latest completed turn, including reasoning, tool calls, and waiting. Updates when a turn completes."}
-        </TooltipPopup>
-      </Tooltip>
-      <ComposerPrimaryActions
-        compact={props.compact}
-        canOperateThread={props.canOperateThread}
-        pendingAction={props.pendingAction}
-        isRunning={props.isRunning}
-        canInterrupt={props.canInterrupt}
-        followUpBehavior={props.followUpBehavior}
-        canSteer={props.canSteer}
-        alternateShortcutLabel={props.alternateShortcutLabel}
-        showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
-        promptHasText={props.promptHasText}
-        isSendBusy={props.isSendBusy}
-        sendDisabledReason={props.sendDisabledReason}
-        isConnecting={props.isConnecting}
-        isEnvironmentUnavailable={props.isEnvironmentUnavailable}
-        isPreparingWorktree={props.isPreparingWorktree}
-        hasSendableContent={props.hasSendableContent}
-        canResume={props.canResume}
-        preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
-        isEditingQueuedMessage={props.isEditingQueuedMessage}
-        onSubmitMessage={props.onSubmitMessage}
-        onResume={props.onResume}
-        onPreviousPendingQuestion={props.onPreviousPendingQuestion}
-        onInterrupt={props.onInterrupt}
-        onImplementPlanInNewThread={props.onImplementPlanInNewThread}
-        compactBeforeSendTokens={props.compactBeforeSendTokens}
-        keepFullHistory={props.keepFullHistory}
-        onToggleKeepFullHistory={props.onToggleKeepFullHistory}
-      />
-    </>
+    <ComposerPrimaryActions
+      compact={props.compact}
+      canOperateThread={props.canOperateThread}
+      pendingAction={props.pendingAction}
+      isRunning={props.isRunning}
+      canInterrupt={props.canInterrupt}
+      followUpBehavior={props.followUpBehavior}
+      canSteer={props.canSteer}
+      alternateShortcutLabel={props.alternateShortcutLabel}
+      showPlanFollowUpPrompt={props.showPlanFollowUpPrompt}
+      promptHasText={props.promptHasText}
+      isSendBusy={props.isSendBusy}
+      sendDisabledReason={props.sendDisabledReason}
+      isConnecting={props.isConnecting}
+      isEnvironmentUnavailable={props.isEnvironmentUnavailable}
+      isPreparingWorktree={props.isPreparingWorktree}
+      hasSendableContent={props.hasSendableContent}
+      canResume={props.canResume}
+      preserveComposerFocusOnPointerDown={props.preserveComposerFocusOnPointerDown ?? false}
+      isEditingQueuedMessage={props.isEditingQueuedMessage}
+      onSubmitMessage={props.onSubmitMessage}
+      onResume={props.onResume}
+      onPreviousPendingQuestion={props.onPreviousPendingQuestion}
+      onInterrupt={props.onInterrupt}
+      onImplementPlanInNewThread={props.onImplementPlanInNewThread}
+      compactBeforeSendTokens={props.compactBeforeSendTokens}
+      keepFullHistory={props.keepFullHistory}
+      onToggleKeepFullHistory={props.onToggleKeepFullHistory}
+    />
   );
 });
 

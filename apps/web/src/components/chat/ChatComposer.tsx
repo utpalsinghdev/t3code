@@ -204,7 +204,7 @@ import {
   ComposerRestingImagePreviews,
 } from "./ComposerAttachmentStrip";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
-import { ComposerFooterPrimaryActions } from "./ComposerFooterControls";
+import { ComposerFooterPrimaryActions, ComposerUsageControls } from "./ComposerFooterControls";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { ComposerPlanFollowUpBanner } from "./ComposerPlanFollowUpBanner";
@@ -2545,6 +2545,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     : expandedControlsIconOnlyBlockCount;
   const composerControls = (
     <ComposerControlsBar
+      usageControls={
+        <ComposerUsageControls
+          size={composerControlsCollapsed ? "xs" : "sm"}
+          hidden={composerControlsHidden}
+          activeContextWindow={settings.contextWindowMeterEnabled ? activeContextWindow : null}
+          contextWindowMeterEnabled={settings.contextWindowMeterEnabled}
+          completedTurnTokensPerSecond={props.completedTurnTokensPerSecond}
+          reserveContextWindowMeter={reserveContextWindowMeter}
+          activeThreadModelDisplayName={activeThreadModelDisplayName}
+          compactDisabled={compactDisabled || noProviderAvailable || isSendBusy || isConnecting}
+          compactDisabledReason={resolvedCompactDisabledReason}
+          {...(compactCommandAvailable ? { onCompactContext: compactThreadContextStable } : {})}
+        />
+      }
       environmentId={environmentId}
       routeKind={routeKind}
       routeThreadRef={routeThreadRef}
@@ -3905,13 +3919,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     canOperateThread={canOperateThread}
-                    activeContextWindow={
-                      settings.contextWindowMeterEnabled ? activeContextWindow : null
-                    }
-                    contextWindowMeterEnabled={settings.contextWindowMeterEnabled}
-                    completedTurnTokensPerSecond={props.completedTurnTokensPerSecond}
-                    reserveContextWindowMeter={reserveContextWindowMeter}
-                    activeThreadModelDisplayName={activeThreadModelDisplayName}
                     pendingAction={pendingPrimaryAction}
                     isRunning={phase === "running"}
                     canInterrupt={canInterrupt}
@@ -3957,13 +3964,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     compactBeforeSendTokens={props.resumeCompactionTokens}
                     keepFullHistory={props.keepFullHistory}
                     onToggleKeepFullHistory={props.onToggleKeepFullHistory}
-                    compactDisabled={
-                      compactDisabled || noProviderAvailable || isSendBusy || isConnecting
-                    }
-                    compactDisabledReason={resolvedCompactDisabledReason}
-                    {...(compactCommandAvailable
-                      ? { onCompactContext: compactThreadContextStable }
-                      : {})}
                   />
                 </div>
               </div>

@@ -6,6 +6,8 @@ import {
   formatContextWindowCost,
 } from "./ContextWindowMeter.logic";
 import { Minimize2Icon } from "lucide-react";
+import type { ComposerControlSize } from "./ComposerControl";
+import { useComposerMenuState } from "./useComposerMenuState";
 import { useComposerMenuProps } from "./composerEventScope";
 
 function formatPercentage(value: number | null): string | null {
@@ -19,6 +21,8 @@ function formatPercentage(value: number | null): string | null {
 }
 
 export function ContextWindowMeter(props: {
+  size?: ComposerControlSize;
+  hidden?: boolean;
   usage: ContextWindowSnapshot | null;
   modelDisplayName?: string | null;
   onCompact?: (() => void) | undefined;
@@ -26,6 +30,8 @@ export function ContextWindowMeter(props: {
   compactDisabledReason?: string | null | undefined;
 }) {
   const { usage, modelDisplayName, onCompact, compactDisabled, compactDisabledReason } = props;
+  const size = props.size ?? "sm";
+  const [open, setOpen] = useComposerMenuState(props.hidden);
   const composerMenuProps = useComposerMenuProps();
   const usedPercentage = formatPercentage(usage?.usedPercentage ?? null);
   const normalizedPercentage = Math.max(0, Math.min(100, usage?.usedPercentage ?? 0));
@@ -47,11 +53,11 @@ export function ContextWindowMeter(props: {
   ];
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
           <Button
-            size="icon-sm"
+            size={size === "xs" ? "icon-xs" : "icon-sm"}
             variant="ghost-muted"
             aria-label={
               usedPercentage !== null
@@ -61,7 +67,9 @@ export function ContextWindowMeter(props: {
                   : "Context window not reported yet. Show breakdown"
             }
           >
-            <span className="relative flex size-5 items-center justify-center">
+            <span
+              className={`relative flex items-center justify-center ${size === "xs" ? "size-4" : "size-5"}`}
+            >
               <svg
                 viewBox="0 0 24 24"
                 className="-rotate-90 absolute inset-0 size-full transform-gpu mx-0!"
@@ -200,6 +208,11 @@ export function ContextWindowMeter(props: {
   );
 }
 
-export function ContextWindowMeterPlaceholder() {
-  return <span aria-hidden="true" className="size-8 shrink-0 sm:size-7" />;
+export function ContextWindowMeterPlaceholder({ size = "sm" }: { size?: ComposerControlSize }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={size === "xs" ? "size-7 shrink-0 sm:size-6" : "size-8 shrink-0 sm:size-7"}
+    />
+  );
 }
