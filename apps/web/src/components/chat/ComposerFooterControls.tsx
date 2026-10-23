@@ -151,6 +151,8 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
   compact: boolean;
   canOperateThread: boolean;
   activeContextWindow: ContextWindowSnapshot | null;
+  contextWindowMeterEnabled: boolean;
+  completedTurnTokensPerSecond: number | null;
   reserveContextWindowMeter: boolean;
   activeThreadModelDisplayName: string | null;
   isPreparingWorktree: boolean;
@@ -190,7 +192,11 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
 }) {
   return (
     <>
-      {props.activeContextWindow ? (
+      {props.contextWindowMeterEnabled &&
+      !props.activeContextWindow &&
+      props.reserveContextWindowMeter ? (
+        <ContextWindowMeterPlaceholder />
+      ) : props.contextWindowMeterEnabled ? (
         <ContextWindowMeter
           usage={props.activeContextWindow}
           modelDisplayName={props.activeThreadModelDisplayName}
@@ -198,9 +204,31 @@ export const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryA
           compactDisabled={props.compactDisabled}
           compactDisabledReason={props.compactDisabledReason}
         />
-      ) : props.reserveContextWindowMeter ? (
-        <ContextWindowMeterPlaceholder />
       ) : null}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              tabIndex={0}
+              className={`shrink-0 whitespace-nowrap rounded-sm text-2xs font-medium tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${props.completedTurnTokensPerSecond === null ? "text-muted-foreground" : "text-success-foreground"}`}
+            />
+          }
+        >
+          {props.completedTurnTokensPerSecond === null
+            ? "N/A"
+            : props.completedTurnTokensPerSecond > 0 && props.completedTurnTokensPerSecond < 0.1
+              ? "<0.1"
+              : props.completedTurnTokensPerSecond.toLocaleString("en-US", {
+                  maximumFractionDigits: 1,
+                })}{" "}
+          TOK/s
+        </TooltipTrigger>
+        <TooltipPopup side="top">
+          {props.completedTurnTokensPerSecond === null
+            ? "Available after a completed turn reports output tokens and timing."
+            : "Average output tokens per second for the latest completed turn, including reasoning, tool calls, and waiting. Updates when a turn completes."}
+        </TooltipPopup>
+      </Tooltip>
       <ComposerPrimaryActions
         compact={props.compact}
         canOperateThread={props.canOperateThread}

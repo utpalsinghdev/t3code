@@ -7,14 +7,128 @@ import {
   ContextTransferId,
   ProviderDriverKind,
   ProviderInstanceId,
+  ProviderThreadId,
   RunId,
   ThreadId,
+  type OrchestrationV2ProviderTurn,
 } from "@t3tools/contracts";
 import { makeThreadProjectionFixture } from "../test-fixtures";
 import { shouldOfferResumeCompaction } from "../components/chat/ContextWindowMeter.logic";
-import { deriveLatestContextWindowSnapshot, latestProviderTurnTokenUsage } from "./contextWindow";
+import {
+  deriveLatestContextWindowSnapshot,
+  latestCompletedTurnTokensPerSecond,
+  latestProviderTurnTokenUsage,
+} from "./contextWindow";
 
 const decodeTokenUsage = Schema.decodeSync(OrchestrationV2ProviderTurnTokenUsage);
+
+describe("latestCompletedTurnTokensPerSecond", () => {
+  const activeId = ProviderThreadId.make("active");
+  const completeUsage = {
+    usageStatus: "complete",
+    usageScope: "main_agent",
+    inputTokens: 1_000,
+    outputTokens: 50,
+    reasoningTokens: 20,
+    hasSubagents: false,
+  } satisfies OrchestrationV2ProviderTurn["turnTokenUsage"];
+  function turn(overrides: Partial<OrchestrationV2ProviderTurn> = {}) {
+    return {
+      providerThreadId: activeId,
+      ordinal: 1,
+      status: "completed",
+      startedAt: DateTime.makeUnsafe("2026-10-20T12:00:00Z"),
+      completedAt: DateTime.makeUnsafe("2026-10-20T12:00:10Z"),
+      turnTokenUsage: completeUsage,
+      ...overrides,
+    } satisfies Pick<
+      OrchestrationV2ProviderTurn,
+      "providerThreadId" | "ordinal" | "status" | "startedAt" | "completedAt" | "turnTokenUsage"
+    >;
+  }
+
+  it("uses normalized output including reasoning once, rather than the last API request", () => {
+    expect(
+      latestCompletedTurnTokensPerSecond(
+        [
+          turn({
+            tokenUsage: { usedTokens: 1_005, outputTokens: 5, updatedAt: "2026-10-20T12:00:10Z" },
+          }),
+        ],
+        activeId,
+      ),
+    ).toBe(5);
+  });
+
+  it("keeps the previous completed turn while a new one is running", () => {
+    expect(
+      latestCompletedTurnTokensPerSecond(
+        [turn(), turn({ ordinal: 2, status: "running", completedAt: null })],
+        activeId,
+      ),
+    ).toBe(5);
+  });
+
+  it("selects the newest completed ordinal regardless of snapshot order", () => {
+    expect(
+      latestCompletedTurnTokensPerSecond(
+        [turn({ ordinal: 2, completedAt: DateTime.makeUnsafe("2026-10-20T12:00:20Z") }), turn()],
+        activeId,
+      ),
+    ).toBe(2.5);
+  });
+
+  it("does not carry rates across active provider threads or forks", () => {
+    const otherId = ProviderThreadId.make("other");
+    const turns = [turn({ ordinal: 10 }), turn({ providerThreadId: otherId, status: "running" })];
+    expect(latestCompletedTurnTokensPerSecond(turns, activeId)).toBe(5);
+    expect(latestCompletedTurnTokensPerSecond(turns, otherId)).toBeNull();
+    expect(latestCompletedTurnTokensPerSecond(turns, null)).toBeNull();
+    expect(latestCompletedTurnTokensPerSecond([], activeId)).toBeNull();
+  });
+
+  it.each([
+    { startedAt: null },
+    { completedAt: null },
+    { completedAt: DateTime.makeUnsafe("2026-10-20T12:00:00Z") },
+    { completedAt: DateTime.makeUnsafe("2026-10-20T11:59:59Z") },
+    { status: "failed" },
+    { status: "interrupted" },
+    { status: "cancelled" },
+  ] satisfies Partial<OrchestrationV2ProviderTurn>[])(
+    "rejects invalid timing or status: %o",
+    (overrides) => {
+      expect(latestCompletedTurnTokensPerSecond([turn(overrides)], activeId)).toBeNull();
+    },
+  );
+
+  it.each(["partial", "unavailable"] as const)("does not estimate from %s usage", (usageStatus) => {
+    const latest = turn({
+      ordinal: 2,
+      turnTokenUsage: { ...completeUsage, usageStatus },
+    });
+    expect(latestCompletedTurnTokensPerSecond([turn(), latest], activeId)).toBeNull();
+  });
+
+  it("requires normalized turn usage even when live request usage exists", () => {
+    const { turnTokenUsage: _, ...withoutUsage } = turn({
+      tokenUsage: { usedTokens: 1_005, outputTokens: 5, updatedAt: "2026-10-20T12:00:10Z" },
+    });
+    expect(latestCompletedTurnTokensPerSecond([withoutUsage], activeId)).toBeNull();
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "handles an output count of %s honestly",
+    (outputTokens) => {
+      expect(
+        latestCompletedTurnTokensPerSecond(
+          [turn({ turnTokenUsage: { ...completeUsage, outputTokens } })],
+          activeId,
+        ),
+      ).toBe(outputTokens === 0 ? 0 : null);
+    },
+  );
+});
 
 describe("V2 context window presentation", () => {
   it("uses retained compaction token data when available", () => {

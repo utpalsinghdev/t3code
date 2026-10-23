@@ -3,6 +3,7 @@ import type {
   OrchestrationV2ProviderTurn,
   OrchestrationV2ProviderTurnTokenUsage,
   OrchestrationV2ProviderThread,
+  ProviderThreadId,
   ThreadTokenUsageSnapshot,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -23,6 +24,49 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
   readonly remainingPercentage: number | null;
   readonly updatedAt: string;
 };
+
+export function latestCompletedTurnTokensPerSecond(
+  turns: ReadonlyArray<
+    Pick<
+      OrchestrationV2ProviderTurn,
+      "providerThreadId" | "ordinal" | "status" | "startedAt" | "completedAt" | "turnTokenUsage"
+    >
+  >,
+  activeProviderThreadId: ProviderThreadId | null | undefined,
+): number | null {
+  if (activeProviderThreadId == null) return null;
+  let latest: (typeof turns)[number] | undefined;
+  for (const turn of turns) {
+    if (
+      turn.providerThreadId === activeProviderThreadId &&
+      turn.status === "completed" &&
+      (latest === undefined || turn.ordinal > latest.ordinal)
+    ) {
+      latest = turn;
+    }
+  }
+  if (
+    latest?.startedAt == null ||
+    latest.completedAt == null ||
+    latest.turnTokenUsage?.usageStatus !== "complete"
+  ) {
+    return null;
+  }
+
+  const elapsedMs =
+    DateTime.toEpochMillis(latest.completedAt) - DateTime.toEpochMillis(latest.startedAt);
+  // Normalized output includes reasoning. Live tokenUsage can cover only the last API request.
+  const outputTokens = latest.turnTokenUsage.outputTokens;
+  if (
+    !Number.isFinite(elapsedMs) ||
+    elapsedMs <= 0 ||
+    !Number.isFinite(outputTokens) ||
+    outputTokens < 0
+  ) {
+    return null;
+  }
+  return outputTokens / (elapsedMs / 1_000);
+}
 
 /** Newest usage report across a thread's provider turns. Snapshots order turns
     by provider thread, not time, so pick by timestamp. */
