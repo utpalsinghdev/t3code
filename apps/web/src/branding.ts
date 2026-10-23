@@ -19,7 +19,9 @@ export const HOSTED_APP_CHANNEL_LABEL =
 export const APP_BASE_NAME = injectedDesktopAppBranding?.baseName ?? "T3 Code";
 export const APP_STAGE_LABEL =
   injectedDesktopAppBranding?.stageLabel ??
-  (import.meta.env.DEV ? "Local" : (HOSTED_APP_CHANNEL_LABEL ?? "Beta"));
+  (import.meta.env.DEV || /-local\./.test(import.meta.env.APP_VERSION ?? "")
+    ? "Local"
+    : (HOSTED_APP_CHANNEL_LABEL ?? "Beta"));
 export const APP_DISPLAY_NAME =
   injectedDesktopAppBranding?.displayName ??
   formatAppDisplayName({ baseName: APP_BASE_NAME, stageLabel: APP_STAGE_LABEL });
