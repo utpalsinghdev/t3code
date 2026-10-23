@@ -156,10 +156,6 @@ export const ComposerUsageControls = memo(function ComposerUsageControls(props: 
   contextWindowMeterEnabled: boolean;
   completedTurnTokensPerSecond: number | null;
   reserveContextWindowMeter: boolean;
-  activeThreadModelDisplayName: string | null;
-  onCompactContext?: (() => void) | undefined;
-  compactDisabled: boolean;
-  compactDisabledReason: string | null;
 }) {
   return (
     <div data-resting-controls-usage className="flex shrink-0 items-center gap-1">
@@ -173,10 +169,6 @@ export const ComposerUsageControls = memo(function ComposerUsageControls(props: 
               size={props.size}
               hidden={props.hidden}
               usage={props.activeContextWindow}
-              modelDisplayName={props.activeThreadModelDisplayName}
-              onCompact={props.onCompactContext}
-              compactDisabled={props.compactDisabled}
-              compactDisabledReason={props.compactDisabledReason}
             />
           )}
         </>
