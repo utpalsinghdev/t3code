@@ -17,7 +17,7 @@ export function resolveSidebarStageBackdropVariant(
   if (!enabled) return null;
   const normalized = stageLabel.trim().toLowerCase();
   if (normalized === "nightly") return "nightly";
-  if (normalized === "dev" || normalized === "local") return "dev";
+  if (normalized === "dev") return "dev";
   return null;
 }
 
