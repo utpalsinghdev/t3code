@@ -356,12 +356,15 @@ function BrowserChromeThemeSync() {
 function DocumentTitleSync() {
   const primaryServerVersion =
     useAtomValue(primaryServerConfigAtom)?.environment.serverVersion ?? null;
-  const title = resolveServerBackedAppDisplayName({
-    baseName: APP_BASE_NAME,
-    fallbackDisplayName: APP_DISPLAY_NAME,
-    fallbackStageLabel: APP_STAGE_LABEL,
-    primaryServerVersion,
-  });
+  const title =
+    APP_STAGE_LABEL === "Local"
+      ? APP_DISPLAY_NAME
+      : resolveServerBackedAppDisplayName({
+          baseName: APP_BASE_NAME,
+          fallbackDisplayName: APP_DISPLAY_NAME,
+          fallbackStageLabel: APP_STAGE_LABEL,
+          primaryServerVersion,
+        });
 
   useEffect(() => {
     document.title = title;

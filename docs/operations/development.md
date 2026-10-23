@@ -67,14 +67,18 @@ Add `--browser` to open a browser automatically.
 
 ### State and ports
 
-Linked worktrees default to their own `.t3/userdata`, even when `T3CODE_HOME` is set.
-The main checkout defaults to `~/.t3/dev`. An explicit `--home-dir` wins in both cases.
-The first start in a worktree seeds its empty database from a read-only copy of
+All checkouts, including the main checkout and linked worktrees, default to their own
+gitignored `.t3/userdata`, even when `T3CODE_HOME` is set. An explicit `--home-dir` wins.
+The first start in a checkout seeds its empty database from a read-only copy of
 `~/.t3/userdata`; `--no-seed` or `T3CODE_DEV_SEED=0` skips that.
 Never run a development server against the live `~/.t3/userdata`.
 See [test data](../../AGENTS.md#test-data) for copying a consistent database snapshot.
 
-Read ports from the `[dev-runner]` output. Worktrees derive stable preferences from their paths,
+Development web and desktop clients show `Local`. The desktop app is named `T3 Code (Local)`,
+keeps the blue development icon, and stores its Electron profile in `<home>/userdata/electron`.
+Its `t3code-dev` protocol remains separate from the installed app's `t3code` protocol.
+
+Read ports from the `[dev-runner]` output. Checkouts derive stable preferences from their paths,
 but occupied ports can shift them. `T3CODE_PORT_OFFSET` or `T3CODE_DEV_INSTANCE` can select a
 different preference when needed.
 

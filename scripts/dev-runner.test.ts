@@ -599,10 +599,11 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         (root) => Effect.sync(() => NodeFS.rmSync(root, { recursive: true, force: true })),
       );
 
-      const spawnedHome = (input: {
+      const spawnedEnvironment = (input: {
         readonly t3Home: string | undefined;
         readonly cwd: string;
         readonly ambientHome: string | undefined;
+        readonly mode?: "dev" | "dev:desktop";
       }) =>
         Effect.gen(function* () {
           let captured: Record<string, string | undefined> | undefined;
@@ -618,7 +619,11 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
             }),
           );
 
-          yield* runDevRunnerWithInput({ ...devServerInput, t3Home: input.t3Home }).pipe(
+          yield* runDevRunnerWithInput({
+            ...devServerInput,
+            mode: input.mode ?? devServerInput.mode,
+            t3Home: input.t3Home,
+          }).pipe(
             Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer, spawnerLayer)),
             Effect.provideService(HostProcess.Platform, "linux"),
             Effect.provideService(HostProcess.WorkingDirectory, input.cwd),
@@ -630,19 +635,19 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
             ),
           );
 
-          return captured?.T3CODE_HOME;
+          return captured;
         });
 
       it.effect("prefers an explicit --home-dir over the worktree default", () =>
         Effect.gen(function* () {
           const path = yield* Path.Path;
           const root = yield* makeWorktree;
-          const home = yield* spawnedHome({
+          const home = yield* spawnedEnvironment({
             t3Home: "/tmp/explicit-home",
             cwd: root,
             ambientHome: "/home/user/.t3",
           });
-          assert.equal(home, path.resolve("/tmp/explicit-home"));
+          assert.equal(home?.T3CODE_HOME, path.resolve("/tmp/explicit-home"));
         }).pipe(Effect.scoped),
       );
 
@@ -650,12 +655,12 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         Effect.gen(function* () {
           const path = yield* Path.Path;
           const root = yield* makeWorktree;
-          const home = yield* spawnedHome({
+          const home = yield* spawnedEnvironment({
             t3Home: "   ",
             cwd: root,
             ambientHome: "/home/user/.t3",
           });
-          assert.equal(home, path.join(path.resolve(root), ".t3"));
+          assert.equal(home?.T3CODE_HOME, path.join(path.resolve(root), ".t3"));
         }).pipe(Effect.scoped),
       );
 
@@ -663,12 +668,12 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         Effect.gen(function* () {
           const path = yield* Path.Path;
           const root = yield* makeWorktree;
-          const home = yield* spawnedHome({
+          const home = yield* spawnedEnvironment({
             t3Home: undefined,
             cwd: root,
             ambientHome: "/home/user/.t3",
           });
-          assert.equal(home, path.join(path.resolve(root), ".t3"));
+          assert.equal(home?.T3CODE_HOME, path.join(path.resolve(root), ".t3"));
         }).pipe(Effect.scoped),
       );
 
@@ -719,16 +724,34 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         }).pipe(Effect.scoped),
       );
 
-      it.effect("falls back to an ambient T3CODE_HOME outside a worktree", () =>
-        Effect.gen(function* () {
-          const path = yield* Path.Path;
-          const home = yield* spawnedHome({
-            t3Home: undefined,
-            cwd: NodeOS.tmpdir(),
-            ambientHome: "/home/user/.t3",
-          });
-          assert.equal(home, path.resolve("/home/user/.t3"));
-        }),
+      it.effect.each(["dev", "dev:desktop"] as const)(
+        "isolates the main checkout from an ambient T3CODE_HOME in %s",
+        (mode) =>
+          Effect.gen(function* () {
+            const path = yield* Path.Path;
+            const home = yield* spawnedEnvironment({
+              t3Home: undefined,
+              cwd: NodeOS.tmpdir(),
+              ambientHome: "/home/user/.t3",
+              mode,
+            });
+            assert.equal(home?.T3CODE_HOME, path.resolve(import.meta.dirname, "../.t3"));
+            assert.isAbove(Number(home?.PORT), 5733);
+            const restarted = yield* spawnedEnvironment({
+              t3Home: undefined,
+              cwd: NodeOS.tmpdir(),
+              ambientHome: "/home/user/.t3",
+              mode,
+            });
+            assert.equal(restarted?.PORT, home?.PORT);
+            const explicit = yield* spawnedEnvironment({
+              t3Home: "/tmp/explicit-home",
+              cwd: NodeOS.tmpdir(),
+              ambientHome: "/home/user/.t3",
+              mode,
+            });
+            assert.equal(explicit?.T3CODE_HOME, path.resolve("/tmp/explicit-home"));
+          }),
       );
     });
   });

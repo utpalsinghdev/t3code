@@ -43,7 +43,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
     environmentIdentificationMode === "artwork",
   );
   const pillLabel =
-    environmentIdentificationMode === "pill"
+    stageLabel === "Local" || environmentIdentificationMode === "pill"
       ? resolveEnvironmentIdentificationPillLabel(stageLabel)
       : null;
 

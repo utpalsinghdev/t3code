@@ -92,7 +92,7 @@ function resolveDesktopAppStageLabel(input: {
   readonly appVersion: string;
 }): DesktopAppStageLabel {
   if (input.isDevelopment) {
-    return "Dev";
+    return "Local";
   }
 
   return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Beta";
