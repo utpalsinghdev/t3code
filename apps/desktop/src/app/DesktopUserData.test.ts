@@ -20,6 +20,19 @@ it.effect("separates development profiles by state directory", () =>
   }).pipe(Effect.provide(NodeServices.layer)),
 );
 
+it.effect("isolates packaged local profiles from installed releases", () =>
+  Effect.gen(function* () {
+    const profile = yield* resolveUserDataPath({
+      appDataDirectory: "/shared/app-data",
+      isDevelopment: false,
+      appVersion: "0.1.2-local.1",
+      platform: "darwin",
+      stateDir: "/local/userdata",
+    });
+    assert.equal(profile, "/local/userdata/electron");
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
 it.effect.each(["t3code", "T3 Code (Alpha)"])(
   "preserves Windows credential keys from %s without copying browser databases",
   (sourceName) =>

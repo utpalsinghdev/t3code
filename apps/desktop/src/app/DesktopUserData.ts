@@ -35,12 +35,15 @@ export const resolveUserDataPath = Effect.fn("desktop.userData.resolveUserDataPa
   function* (input: {
     readonly appDataDirectory: string;
     readonly isDevelopment: boolean;
+    readonly appVersion?: string;
     readonly platform: NodeJS.Platform;
     readonly stateDir: string;
   }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    if (input.isDevelopment) return path.join(input.stateDir, "electron");
+    if (input.isDevelopment || /-local\./.test(input.appVersion ?? "")) {
+      return path.join(input.stateDir, "electron");
+    }
     const names = { current: "t3code-v2", legacy: "T3 Code (Alpha)" };
     const destinationPath = path.join(input.appDataDirectory, names.current);
     const legacyPath = path.join(input.appDataDirectory, names.legacy);

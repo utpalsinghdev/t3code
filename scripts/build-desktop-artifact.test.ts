@@ -473,6 +473,29 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     }),
   );
 
+  it.effect("packages local builds with an isolated identity and no update feed", () =>
+    Effect.gen(function* () {
+      const config = yield* createBuildConfig(
+        "mac",
+        "dir",
+        "0.1.2-local.1",
+        false,
+        false,
+        undefined,
+        undefined,
+      );
+      assert.equal(config.productName, "T3 Code (Local)");
+      assert.equal(config.appId, "com.t3tools.t3code.local");
+      assert.isNull(config.publish);
+    }).pipe(
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({ env: { GITHUB_REPOSITORY: "pingdotgg/t3code" } }),
+        ),
+      ),
+    ),
+  );
+
   it.effect("omits update feeds for pull request preview builds", () =>
     Effect.gen(function* () {
       const preview = yield* createBuildConfig(
