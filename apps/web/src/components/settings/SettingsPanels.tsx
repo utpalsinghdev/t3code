@@ -719,19 +719,6 @@ export function LegacyFeaturesSection() {
         }
       />
       <SettingsRow
-        {...searchableSetting("legacy-context-window-indicator")}
-        description="Shows context window usage as a circular indicator in the composer."
-        control={
-          <Switch
-            checked={settings.contextWindowMeterEnabled}
-            onCheckedChange={(checked) =>
-              updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
-            }
-            aria-label="Context window indicator (legacy)"
-          />
-        }
-      />
-      <SettingsRow
         {...searchableSetting("legacy-sidebar")}
         description="Restore per-project thread trees instead of the default flat sidebar."
         control={
@@ -1055,6 +1042,33 @@ export function ChatSettingsPanel() {
   return (
     <SettingsPageContainer>
       <SettingsSection id="composer" title="Composer">
+        <SettingsRow
+          {...searchableSetting("legacy-context-window-indicator")}
+          description="Show a clickable context ring with reported token usage in the composer."
+          resetAction={
+            settings.contextWindowMeterEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled ? (
+              <SettingResetButton
+                label="context window indicator"
+                onClick={() =>
+                  updateSettings({
+                    contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.contextWindowMeterEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
+              }
+              aria-label="Context window indicator"
+            />
+          }
+        />
+
         <SettingsRow
           {...searchableSetting("composer-rich-text")}
           description="Show formatted Markdown as you type."

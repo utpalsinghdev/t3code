@@ -313,6 +313,7 @@ import {
 } from "./chat/ContextWindowMeter.logic";
 import {
   deriveLatestContextWindowSnapshot,
+  latestCompletedTurnTokensPerSecond,
   latestProviderTurnTokenUsage,
 } from "../lib/contextWindow";
 import {
@@ -1377,6 +1378,10 @@ export default function ChatView(props: ChatViewProps) {
     serverVisibleTurnItems ?? [],
     activeThreadLiveTokenUsage,
     activeProviderThread,
+  );
+  const completedTurnTokensPerSecond = latestCompletedTurnTokensPerSecond(
+    serverProjection?.providerTurns ?? [],
+    activeProviderThread?.id,
   );
   const pendingBackgroundTasks = deriveThreadPendingBackgroundTasks(serverProjection);
   const activeWorkStartedAt =
@@ -2464,15 +2469,6 @@ export default function ChatView(props: ChatViewProps) {
     pendingUserInputs.length > 0 ||
     showPlanFollowUpPrompt;
   const compactDisabled = compactThreadUnavailable;
-  const compactDisabledReason = compactDisabled
-    ? !canOperateThread
-      ? "This connection cannot change threads."
-      : !activeProject
-        ? "Choose a project before compacting"
-        : !manualCompactionProviderAvailable
-          ? "Compaction is unavailable for this provider"
-          : "Compacting is unavailable right now"
-    : null;
   const resumeCompactionTokens =
     activeContextWindow &&
     resolveIdleCompaction(
@@ -3559,11 +3555,11 @@ export default function ChatView(props: ChatViewProps) {
                               activeThreadModelSelection={activeThread?.modelSelection}
                               activeProjectId={activeProject?.id ?? null}
                               activeContextWindow={activeContextWindow}
+                              completedTurnTokensPerSecond={completedTurnTokensPerSecond}
                               activeTasksProgress={activeComposerTasksProgress}
                               activeTaskSteps={activeComposerTaskSteps}
                               compactThreadUnavailable={compactThreadUnavailable}
                               compactDisabled={compactDisabled}
-                              compactDisabledReason={compactDisabledReason}
                               resolvedTheme={resolvedTheme}
                               settings={settings}
                               keybindings={keybindings}

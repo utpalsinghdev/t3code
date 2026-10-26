@@ -101,12 +101,15 @@ function startDocumentTitle(): void {
   appAtomRegistry.subscribe(
     primaryServerConfigAtom,
     (config) => {
-      document.title = resolveServerBackedAppDisplayName({
-        baseName: APP_BASE_NAME,
-        fallbackDisplayName: APP_DISPLAY_NAME,
-        fallbackStageLabel: APP_STAGE_LABEL,
-        primaryServerVersion: config?.environment.serverVersion ?? null,
-      });
+      document.title =
+        APP_STAGE_LABEL === "Local"
+          ? APP_DISPLAY_NAME
+          : resolveServerBackedAppDisplayName({
+              baseName: APP_BASE_NAME,
+              fallbackDisplayName: APP_DISPLAY_NAME,
+              fallbackStageLabel: APP_STAGE_LABEL,
+              primaryServerVersion: config?.environment.serverVersion ?? null,
+            });
     },
     { immediate: true },
   );

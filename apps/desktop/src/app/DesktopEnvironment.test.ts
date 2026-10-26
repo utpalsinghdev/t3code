@@ -60,6 +60,14 @@ describe("DesktopEnvironment", () => {
     }),
   );
 
+  it.effect("labels packaged local builds independently of nightly", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment({ isPackaged: true, appVersion: "0.1.2-local.1" });
+      assert.equal(environment.displayName, "T3 Code (Local)");
+      assert.isFalse(environment.isDevelopment);
+    }),
+  );
+
   it.effect("keeps implicit development state separate from production state", () =>
     Effect.gen(function* () {
       const development = yield* makeEnvironment(

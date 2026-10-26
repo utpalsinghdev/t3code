@@ -519,6 +519,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["command menu dollar $ slash /"],
   },
   {
+    id: "legacy-context-window-indicator",
+    title: "Context window indicator",
+    to: "/settings/chat",
+    searchTerms: [
+      "composer meter usage tokens circle ring breakdown context remaining cached input output reasoning",
+    ],
+  },
+  {
     id: "composer-rich-text",
     title: "Rich text composer",
     to: "/settings/chat",
@@ -690,12 +698,6 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Plan mode (legacy)",
     to: "/settings/labs",
     searchTerms: ["build plan composer old"],
-  },
-  {
-    id: "legacy-context-window-indicator",
-    title: "Context window indicator (legacy)",
-    to: "/settings/labs",
-    searchTerms: ["composer meter usage tokens circle old"],
   },
   {
     id: "legacy-sidebar",

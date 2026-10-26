@@ -6,6 +6,33 @@ import * as Path from "effect/Path";
 
 import { resolveUserDataPath } from "./DesktopUserData.ts";
 
+it.effect("separates development profiles by state directory", () =>
+  Effect.gen(function* () {
+    const input = {
+      appDataDirectory: "/shared/app-data",
+      isDevelopment: true,
+      platform: "darwin",
+    } as const;
+    const main = yield* resolveUserDataPath({ ...input, stateDir: "/main/.t3/userdata" });
+    const worktree = yield* resolveUserDataPath({ ...input, stateDir: "/worktree/.t3/userdata" });
+    assert.equal(main, "/main/.t3/userdata/electron");
+    assert.equal(worktree, "/worktree/.t3/userdata/electron");
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect("isolates packaged local profiles from installed releases", () =>
+  Effect.gen(function* () {
+    const profile = yield* resolveUserDataPath({
+      appDataDirectory: "/shared/app-data",
+      isDevelopment: false,
+      appVersion: "0.1.2-local.1",
+      platform: "darwin",
+      stateDir: "/local/userdata",
+    });
+    assert.equal(profile, "/local/userdata/electron");
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
 it.effect.each(["t3code", "T3 Code (Alpha)"])(
   "preserves Windows credential keys from %s without copying browser databases",
   (sourceName) =>
@@ -24,6 +51,7 @@ it.effect.each(["t3code", "T3 Code (Alpha)"])(
         appDataDirectory: directory,
         isDevelopment: false,
         platform: "win32",
+        stateDir: path.join(directory, "userdata"),
       });
       assert.equal(yield* fs.readFileString(path.join(destination, "Local State")), state);
       assert.equal(yield* fs.readFileString(path.join(source, "Local State")), state);
@@ -33,6 +61,7 @@ it.effect.each(["t3code", "T3 Code (Alpha)"])(
         appDataDirectory: directory,
         isDevelopment: false,
         platform: "win32",
+        stateDir: path.join(directory, "userdata"),
       });
       assert.equal(
         yield* fs.readFileString(path.join(destination, "Local State")),

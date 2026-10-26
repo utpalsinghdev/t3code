@@ -159,18 +159,17 @@ describe("DesktopAppIdentity", () => {
     ),
   );
 
-  it.effect("keeps using the legacy development profile", () =>
+  it.effect("isolates local development from existing development profiles", () =>
     withIdentity(
       Effect.gen(function* () {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
-        assert.equal(
-          yield* identity.resolveUserDataPath,
-          "/Users/alice/Library/Application Support/T3 Code (Dev)",
-        );
+        assert.equal(yield* identity.resolveUserDataPath, "/repo/.t3/userdata/electron");
       }),
       {
         legacyPathExists: true,
-        environment: { env: { VITE_DEV_SERVER_URL: "http://localhost:5173" } },
+        environment: {
+          env: { VITE_DEV_SERVER_URL: "http://localhost:5173", T3CODE_HOME: "/repo/.t3" },
+        },
       },
     ),
   );
@@ -182,7 +181,7 @@ describe("DesktopAppIdentity", () => {
       environment: { appVersion: "0.0.43-nightly.20260929.2428" },
     },
     {
-      stage: "Dev",
+      stage: "Local",
       environment: { env: { VITE_DEV_SERVER_URL: "http://localhost:5173" } },
     },
   ])("uses a valid native User-Agent product name for $stage", ({ stage, environment }) => {

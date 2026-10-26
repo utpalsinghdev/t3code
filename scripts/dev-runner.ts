@@ -5,7 +5,7 @@ import * as NodeOS from "node:os";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
-import { resolveGitWorktreePath, resolveWorktreeT3Home } from "@t3tools/shared/devHome";
+import { resolveGitWorktreePath } from "@t3tools/shared/devHome";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Config from "effect/Config";
@@ -602,22 +602,22 @@ const runRepoScript = Effect.fn("dev-runner.runRepoScript")(function* (
 });
 
 /**
- * The first start in a worktree seeds its empty database from a small live database
+ * The first start in a checkout seeds its empty database from a small live database
  * and warms the web dependency cache. Each step checks for its own output, so
  * later starts skip it.
  */
 const prepareFirstStart = Effect.fn("dev-runner.prepareFirstStart")(function* (input: {
   readonly mode: DevMode;
   readonly seed: boolean;
-  readonly worktreeHome: string | undefined;
+  readonly checkoutHome: string | undefined;
   readonly env: NodeJS.ProcessEnv;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const exists = (file: string) => fs.exists(file).pipe(Effect.orElseSucceed(() => false));
 
-  if (input.worktreeHome !== undefined && input.mode !== "dev:web") {
-    const stateDir = path.join(input.worktreeHome, "userdata");
+  if (input.checkoutHome !== undefined && input.mode !== "dev:web") {
+    const stateDir = path.join(input.checkoutHome, "userdata");
     for (const name of ["statev2.sqlite", "state.sqlite"]) {
       const file = path.join(stateDir, name);
       const info = yield* fs.stat(file).pipe(Effect.option);
@@ -643,11 +643,11 @@ const prepareFirstStart = Effect.fn("dev-runner.prepareFirstStart")(function* (i
           );
         } else {
           yield* Effect.logInfo(
-            `[dev-runner] seeding ${input.worktreeHome} from ${source} (read-only). --no-seed or T3CODE_DEV_SEED=0 skips this.`,
+            `[dev-runner] seeding ${input.checkoutHome} from ${source} (read-only). --no-seed or T3CODE_DEV_SEED=0 skips this.`,
           );
           yield* runRepoScript(
             "apps/server/scripts/migrate-dev-db.ts",
-            ["--base-dir", input.worktreeHome, "--source", source],
+            ["--base-dir", input.checkoutHome, "--source", source],
             input.env,
           );
         }
@@ -705,12 +705,15 @@ export const runDevRunnerWithInput = Effect.fn("dev-runner.runDevRunnerWithInput
     return yield* new DevRunnerBuiltNeedsShareError({ mode: input.mode });
   }
 
-  const worktreePath = yield* resolveGitWorktreePath(yield* HostProcess.WorkingDirectory);
+  const path = yield* Path.Path;
+  const checkoutPath =
+    (yield* resolveGitWorktreePath(yield* HostProcess.WorkingDirectory)) ??
+    path.resolve(import.meta.dirname, "..");
 
   const { offset, source } = yield* resolveOffset({
     portOffset,
     devInstance,
-    worktreePath,
+    worktreePath: checkoutPath,
   });
 
   const { serverOffset, webOffset } = yield* resolveModePortOffsets({
@@ -722,17 +725,10 @@ export const runDevRunnerWithInput = Effect.fn("dev-runner.runDevRunnerWithInput
   });
 
   const hostEnvironment = yield* HostProcess.Environment;
-  // A dev server started inside a worktree defaults to that worktree's own
-  // (gitignored) `.t3` — see @t3tools/shared/devHome for why this must
-  // outrank an ambient T3CODE_HOME. `--home-dir` still wins.
-  const worktreeHome = yield* resolveWorktreeT3Home(yield* HostProcess.WorkingDirectory);
-  // Trim before choosing: `--home-dir ""` is not a selection, and treating it
-  // as one would skip the worktree default and land on the shared home —
-  // exactly the outcome this precedence exists to prevent.
-  const resolvedT3Home =
-    (input.t3Home?.trim() || undefined) ??
-    worktreeHome ??
-    (hostEnvironment.T3CODE_HOME?.trim() || undefined);
+  // Ignore an inherited T3CODE_HOME so launches from the installed app cannot
+  // reuse its live state. Only --home-dir deliberately selects another home.
+  const checkoutHome = path.join(checkoutPath, ".t3");
+  const resolvedT3Home = input.t3Home?.trim() || checkoutHome;
   const env = yield* createDevRunnerEnv({
     mode: input.mode,
     baseEnv: hostEnvironment,
@@ -852,7 +848,7 @@ export const runDevRunnerWithInput = Effect.fn("dev-runner.runDevRunnerWithInput
   yield* prepareFirstStart({
     mode: input.mode,
     seed: input.seed !== false,
-    worktreeHome: baseDir === worktreeHome ? worktreeHome : undefined,
+    checkoutHome: baseDir === checkoutHome ? checkoutHome : undefined,
     env,
   });
 
@@ -911,7 +907,7 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   t3Home: Flag.String("home-dir").pipe(
     Flag.withDescription(
-      "Explicit T3 Code data directory; runtime state is stored under userdata (equivalent to T3CODE_HOME). Inside a git worktree this defaults to that worktree's own .t3 so dev state stays off the shared home.",
+      "Explicit T3 Code data directory; runtime state is stored under userdata. Defaults to this checkout's .t3, ignoring an inherited T3CODE_HOME.",
     ),
     Flag.optional,
     Flag.map(Option.getOrUndefined),
@@ -960,7 +956,7 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   seed: Flag.Boolean("seed").pipe(
     Flag.withDescription(
-      "Seed an empty worktree database from ~/.t3 on first start (read-only, via migrate-dev-db) if the source is at most 500 MiB. On by default; --no-seed or T3CODE_DEV_SEED=0 skips it.",
+      "Seed an empty checkout database from ~/.t3 on first start (read-only, via migrate-dev-db) if the source is at most 500 MiB. On by default; --no-seed or T3CODE_DEV_SEED=0 skips it.",
     ),
     Flag.withFallbackConfig(optionalBooleanConfig("T3CODE_DEV_SEED")),
   ),
