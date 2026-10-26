@@ -80,6 +80,15 @@ describe("desktop preload bundle verifier", () => {
     );
   });
 
+  it("accepts preload registration of window event listeners", () => {
+    assert.doesNotThrow(() =>
+      verifyPreloadBundle(`
+        ${validPreload}
+        window.addEventListener("DOMContentLoaded", () => {});
+      `),
+    );
+  });
+
   it("ignores require-like text in strings and comments", () => {
     assert.doesNotThrow(() =>
       verifyPreloadBundle(`
