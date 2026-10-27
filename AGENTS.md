@@ -75,6 +75,18 @@ The most common defect in this repo is a change that works on the path you teste
 - **Connection modes.** Local, remote/relay, and tunnel behave differently. Multi-device and multi-environment cases are real.
 - **Docs.** Check whether the change makes existing guidance inaccurate. Apply the [documentation rules](#documentation) before adding anything.
 
+## Updating this Local fork
+
+For upstream merges, Local releases, and installation updates, follow
+[update-t3-local](.agents/skills/update-t3-local/SKILL.md). Preserve the composer's context
+meter and `tok/s` display, including Pi's per-turn token reporting. Build the desktop app
+and its bundled Linux x64 and arm64 SSH runtimes from the same source and full `-local.N`
+version. Local connections must install the bundled fork runtime; stripping the Local
+suffix or substituting an upstream server loses fork features. Verify the installed app
+and actual remote service runtime, plus Pi token data, before calling an update complete.
+Keep live data intact and get approval before interrupting active agents or restarting
+the app the user is working in. The skill owns the build and installation procedure.
+
 ## Dev servers
 
 - `vp i` installs. Worktrees get this from the t3.json setup script; if module resolution looks broken, it probably did not run.

@@ -65,6 +65,7 @@ export interface RemoteT3RunnerOptions {
   readonly nodeEngineRange?: string | null;
   readonly archiveVersion?: string | null;
   readonly releaseBaseUrl?: string | null;
+  readonly bundledArchiveDirectory?: string;
 }
 
 export interface SshEnvironmentManagerOptions {
@@ -447,6 +448,7 @@ fi
 # Self-contained release archive: no Node, npm, or compiler on the remote.
 # Unpacked into the pinned-runtime layout so \`t3 service install\` reuses it.
 T3_RELEASE_BASE_URL=@@T3_RELEASE_BASE_URL@@
+T3_BUNDLED_ARCHIVE=@@T3_BUNDLED_ARCHIVE@@
 T3_RUNTIME_DIR="$HOME/.t3/runtime/versions/$T3_ARCHIVE_VERSION"
 t3_runtime_ready() {
   [ -x "$T3_RUNTIME_DIR/t3" ] && [ "$(cat "$T3_RUNTIME_DIR/.install-complete" 2>/dev/null)" = "$T3_ARCHIVE_VERSION" ]
@@ -502,8 +504,14 @@ if ! t3_runtime_ready; then
     else printf 'Remote host needs curl or wget to download %s.\\n' "$T3_ARCHIVE" >&2; exit 1
     fi
   }
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/SHA256SUMS" "$T3_STAGING/SHA256SUMS" @@T3_ARCHIVE_CHECKSUMS_SECONDS@@
-  t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE" @@T3_ARCHIVE_DOWNLOAD_SECONDS@@
+  if [ "$T3_BUNDLED_ARCHIVE" = "1" ]; then
+    T3_UPLOAD_DIR="$HOME/.t3/runtime/uploads/$T3_ARCHIVE_VERSION"
+    cp "$T3_UPLOAD_DIR/$T3_ARCHIVE.sha256" "$T3_STAGING/SHA256SUMS"
+    cp "$T3_UPLOAD_DIR/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE"
+  else
+    t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/SHA256SUMS" "$T3_STAGING/SHA256SUMS" @@T3_ARCHIVE_CHECKSUMS_SECONDS@@
+    t3_fetch "$T3_RELEASE_BASE_URL/v$T3_ARCHIVE_VERSION/$T3_ARCHIVE" "$T3_STAGING/$T3_ARCHIVE" @@T3_ARCHIVE_DOWNLOAD_SECONDS@@
+  fi
   T3_EXPECTED="$(grep " \\*\\{0,1\\}$T3_ARCHIVE$" "$T3_STAGING/SHA256SUMS" | cut -d' ' -f1)"
   if command -v sha256sum >/dev/null 2>&1; then
     T3_ACTUAL="$(sha256sum "$T3_STAGING/$T3_ARCHIVE" | cut -d' ' -f1)"
@@ -517,8 +525,11 @@ if ! t3_runtime_ready; then
   rm -f "$T3_STAGING/$T3_ARCHIVE" "$T3_STAGING/SHA256SUMS"
   # Prove the binary runs here (libc, arch) before marking it ready, or every
   # later launch would exec a broken install instead of retrying.
-  if ! "$T3_STAGING/t3" --version >/dev/null 2>&1; then
+  if ! T3_INSTALLED_VERSION="$("$T3_STAGING/t3" --version 2>/dev/null)"; then
     printf 'The t3 %s executable does not run on this host.\\n' "$T3_ARCHIVE_VERSION" >&2; exit 1
+  fi
+  if [ "$T3_BUNDLED_ARCHIVE" = "1" ] && [ "$T3_INSTALLED_VERSION" != "t3 v$T3_ARCHIVE_VERSION" ]; then
+    printf 'The bundled t3 runtime does not match Local %s.\\n' "$T3_ARCHIVE_VERSION" >&2; exit 1
   fi
   printf '%s\\n' "$T3_ARCHIVE_VERSION" > "$T3_STAGING/.install-complete"
   rm -rf "$T3_RUNTIME_DIR"
@@ -563,6 +574,27 @@ if [ "$T3_ARCHIVE_MODE" = "1" ]; then
   # needs no Node at all. Resolving the runner once here also downloads the
   # archive before the port and readiness probes rely on it.
   "$RUNNER_FILE" --version >/dev/null
+  if [ @@T3_BUNDLED_ARCHIVE@@ = "1" ] && [ "$(uname -s)" = "Linux" ]; then
+    "$RUNNER_FILE" service install --allow-downgrade --base-dir "$DEFAULT_SERVER_HOME" >>"$LOG_FILE" 2>&1
+    T3_SERVICE_WAIT=0
+    while [ "$T3_SERVICE_WAIT" -lt 60 ]; do
+      T3_SERVICE_INFO="$("$RUNNER_FILE" __ssh-helper runtime-port "$DEFAULT_RUNTIME_FILE" --expected-version @@T3_ARCHIVE_VERSION@@ 2>/dev/null || true)"
+      if [ -n "$T3_SERVICE_INFO" ]; then
+        REMOTE_PORT="\${T3_SERVICE_INFO#* }"
+        if "$RUNNER_FILE" __ssh-helper wait-ready "$REMOTE_PORT" "@@T3_READY_TIMEOUT_MS@@" "@@T3_READY_PROBE_TIMEOUT_MS@@"; then
+          printf '%s\\n' "$REMOTE_PORT" >"$PORT_FILE"
+          printf 'external\\n' >"$MANAGED_FILE"
+          rm -f "$PID_FILE"
+          printf '{"remotePort":%s,"serverKind":"external"}\\n' "$REMOTE_PORT"
+          exit 0
+        fi
+      fi
+      sleep 1
+      T3_SERVICE_WAIT=$((T3_SERVICE_WAIT + 1))
+    done
+    printf 'The matching Local service did not start. Check t3 service status and the boot-service log on the remote host.\\n' >&2
+    exit 1
+  fi
 elif ! ensure_remote_node_path; then
   printf 'Remote host is missing node on PATH. Install Node or configure a supported version manager for non-interactive shells.\\n' >&2
   exit 1
@@ -816,6 +848,7 @@ export function buildRemoteT3RunnerScript(input?: RemoteT3RunnerOptions): string
       T3_NODE_SCRIPT_PATH: shellSingleQuote(nodeScriptPath),
       T3_ARCHIVE_VERSION: shellSingleQuote(archiveVersion),
       T3_RELEASE_BASE_URL: shellSingleQuote(releaseBaseUrl),
+      T3_BUNDLED_ARCHIVE: input?.bundledArchiveDirectory === undefined ? "0" : "1",
       T3_ARCHIVE_LOCK_WAIT_SECONDS: String(REMOTE_ARCHIVE_LOCK_WAIT_SECONDS),
       T3_ARCHIVE_DOWNLOAD_SECONDS: String(REMOTE_ARCHIVE_DOWNLOAD_SECONDS),
       T3_ARCHIVE_CHECKSUMS_SECONDS: String(REMOTE_ARCHIVE_CHECKSUMS_SECONDS),
@@ -835,6 +868,8 @@ export function buildRemoteNodeEnvScript(input?: RemoteT3RunnerOptions): string 
 
 function buildRemoteLaunchScript(input?: RemoteT3RunnerOptions): string {
   return applyScriptPlaceholders(REMOTE_LAUNCH_SCRIPT, {
+    T3_BUNDLED_ARCHIVE: input?.bundledArchiveDirectory === undefined ? "0" : "1",
+    T3_ARCHIVE_VERSION: shellSingleQuote(input?.archiveVersion ?? ""),
     T3_ARCHIVE_MODE: isNodeScriptRunner(input) ? "0" : "1",
     T3_NODE_ENV_SCRIPT: buildRemoteNodeEnvScript(input),
     T3_RUNNER_SCRIPT: stripTrailingNewlines(buildRemoteT3RunnerScript(input)),
@@ -867,6 +902,112 @@ function buildRemoteLogTailScript(stateKey: string): string {
   });
 }
 
+const uploadBundledRuntime = Effect.fn("ssh/tunnel.uploadBundledRuntime")(
+  function* (
+    target: DesktopSshEnvironmentTarget,
+    auth: SshAuth.SshAuthOptions | undefined,
+    runner: RemoteT3RunnerOptions,
+  ) {
+    const directory = runner.bundledArchiveDirectory;
+    if (directory === undefined || isNodeScriptRunner(runner)) return;
+    buildRemoteT3RunnerScript(runner);
+    const version = runner.archiveVersion?.trim() ?? "";
+    const probe = yield* runSshCommand(target, {
+      ...auth,
+      remoteCommandArgs: ["sh", "-s"],
+      stdin: `set -eu
+case "$(uname -s)" in Linux) platform=linux ;; Darwin) platform=darwin ;; *) exit 1 ;; esac
+case "$(uname -m)" in x86_64|amd64) arch=x64 ;; aarch64|arm64) arch=arm64 ;; *) exit 1 ;; esac
+ready=false
+runtime="$HOME/.t3/runtime/versions/${version}"
+if [ -x "$runtime/t3" ] && [ "$(cat "$runtime/.install-complete" 2>/dev/null)" = ${shellSingleQuote(version)} ]; then ready=true; fi
+printf '{"platform":"%s","arch":"%s","ready":%s}\\n' "$platform" "$arch" "$ready"
+`,
+    });
+    const runtime = yield* decodeRemoteJsonOutput(
+      probe.stdout,
+      Schema.decodeUnknownEffect(
+        fromLenientJson(
+          Schema.Struct({
+            platform: Schema.Literals(["linux", "darwin"]),
+            arch: Schema.Literals(["x64", "arm64"]),
+            ready: Schema.Boolean,
+          }),
+        ),
+      ),
+    ).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SshLaunchError({
+            stdout: "",
+            message: "Could not identify the remote platform for the bundled Local runtime.",
+            cause,
+          }),
+      ),
+    );
+    if (runtime.ready) return;
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const filename = `t3-${version}-${runtime.platform}-${runtime.arch}.tar.gz`;
+    const archive = path.join(directory, filename);
+    if (!(yield* fs.exists(archive))) {
+      return yield* new SshLaunchError({
+        stdout: "",
+        message: `This Local app does not include a server for ${runtime.platform}-${runtime.arch}. Rebuild Local with that runtime archive.`,
+      });
+    }
+    const checksum = yield* fs.readFileString(`${archive}.sha256`).pipe(
+      Effect.mapError(
+        (cause) =>
+          new SshLaunchError({
+            stdout: "",
+            message: "The bundled runtime checksum is missing.",
+            cause,
+          }),
+      ),
+    );
+    const digest = checksum.trim().split(/\s+/u)[0] ?? "";
+    if (!/^[a-f0-9]{64}$/u.test(digest)) {
+      return yield* new SshLaunchError({
+        stdout: "",
+        message: "The bundled runtime checksum is invalid.",
+      });
+    }
+    yield* runSshCommand(target, {
+      ...auth,
+      remoteCommandArgs: [
+        "sh",
+        "-c",
+        shellSingleQuote(`set -eu
+directory="$HOME/.t3/runtime/uploads/${version}"
+mkdir -p "$directory"
+archive="$directory/${filename}"
+temporary="$archive.upload.$$"
+trap 'rm -f "$temporary"' EXIT
+cat > "$temporary"
+if command -v sha256sum >/dev/null 2>&1; then actual="$(sha256sum "$temporary" | cut -d' ' -f1)"
+else actual="$(shasum -a 256 "$temporary" | cut -d' ' -f1)"; fi
+[ "$actual" = ${shellSingleQuote(digest)} ] || { printf 'Bundled runtime checksum mismatch.\\n' >&2; exit 1; }
+mv "$temporary" "$archive"
+printf '%s  %s\\n' ${shellSingleQuote(digest)} ${shellSingleQuote(filename)} > "$archive.sha256"
+`),
+      ],
+      stdinFile: archive,
+      timeoutMs: REMOTE_ARCHIVE_LAUNCH_TIMEOUT_MS,
+    });
+  },
+  Effect.catchTags({
+    PlatformError: (cause) =>
+      Effect.fail(
+        new SshLaunchError({
+          message: "Could not read the bundled Local runtime archive.",
+          stdout: "",
+          cause,
+        }),
+      ),
+  }),
+);
+
 export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemoteServer")(
   function* (
     target: DesktopSshEnvironmentTarget,
@@ -877,6 +1018,9 @@ export const launchOrReuseRemoteServer = Effect.fn("ssh/tunnel.launchOrReuseRemo
     SshCommandError | SshInvalidTargetError | SshLaunchError,
     ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | FileSystem.FileSystem | Path.Path
   > {
+    if (runner?.bundledArchiveDirectory !== undefined) {
+      yield* uploadBundledRuntime(target, input, runner);
+    }
     const stateKey = yield* remoteStateKey(target);
     yield* Effect.logInfo("ssh.remoteServer.launch.start", {
       ...sshTargetLogFields(target),

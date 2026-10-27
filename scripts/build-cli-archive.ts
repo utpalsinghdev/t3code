@@ -500,14 +500,19 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   } else {
     // npm rejects Linux hardlink entries; macOS pnpm clones and bsdtar lacks this flag.
     yield* runCommand(
-      ChildProcess.make("tar", [
-        ...(input.platform === "linux" ? ["--hard-dereference"] : []),
-        "-czf",
-        archivePath,
-        "-C",
-        stageRoot,
-        stem,
-      ]),
+      ChildProcess.make(
+        "tar",
+        [
+          ...(hostPlatform === "linux" ? ["--hard-dereference"] : []),
+          ...(hostPlatform === "darwin" ? ["--no-xattrs"] : []),
+          "-czf",
+          archivePath,
+          "-C",
+          stageRoot,
+          stem,
+        ],
+        { env: { COPYFILE_DISABLE: "1" }, extendEnv: true },
+      ),
       "tar (gzip)",
     );
   }

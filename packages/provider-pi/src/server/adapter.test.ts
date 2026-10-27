@@ -606,6 +606,52 @@ describe("PiAdapterV2", () => {
     }).pipe(Effect.scoped, Effect.provide(layerTest)),
   );
 
+  it.effect("reports output tokens separately for each completed Pi turn", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakePi;
+      const { runtime, takeEvent } = yield* openRuntime(fake);
+      const providerThread = yield* runtime.ensureThread({
+        threadId: THREAD_ID,
+        modelSelection: modelSelection("default"),
+        runtimePolicy,
+      });
+      for (const { outputs, inputTokens, outputTokens } of [
+        { outputs: [12, 18], inputTokens: 260, outputTokens: 30 },
+        { outputs: [7], inputTokens: 130, outputTokens: 7 },
+      ]) {
+        yield* startTurn(runtime, providerThread);
+        yield* fake.takeRequest("prompt");
+        yield* fake.emit({ type: "agent_start" });
+        for (const output of outputs) {
+          yield* fake.emit({
+            type: "message_end",
+            message: {
+              role: "assistant",
+              stopReason: "stop",
+              usage: { input: 100, cacheRead: 20, cacheWrite: 10, output, reasoning: 5 },
+            },
+          });
+        }
+        fake.queueState({ isStreaming: false });
+        yield* fake.emit({ type: "agent_settled" });
+        const event = yield* takeEvent(
+          (event) =>
+            event.type === "provider_turn.updated" && event.providerTurn.status === "completed",
+        );
+        assert.isTrue(event.type === "provider_turn.updated");
+        if (event.type !== "provider_turn.updated") return;
+        assert.deepEqual(event.providerTurn.turnTokenUsage, {
+          usageScope: "main_agent",
+          usageStatus: "complete",
+          hasSubagents: false,
+          inputTokens,
+          outputTokens,
+        });
+        yield* takeEvent((event) => event.type === "turn.terminal");
+      }
+    }).pipe(Effect.scoped, Effect.provide(layerTest)),
+  );
+
   it.effect.each([false, true])(
     "completes a resumed user turn before native wake events arrive, Pi streaming=%s",
     (streaming) =>

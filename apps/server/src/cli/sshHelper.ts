@@ -6,7 +6,8 @@ import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
 
 import * as Effect from "effect/Effect";
-import { Argument, Command } from "effect/cli";
+import * as Option from "effect/Option";
+import { Argument, Command, Flag } from "effect/cli";
 
 const canBind = (port: number) =>
   new Promise<boolean>((resolve) => {
@@ -94,8 +95,9 @@ const waitReady = Command.make("wait-ready", {
 /** Prints `<pid> <port>` for a live default-home server, or exits 1. */
 const runtimePort = Command.make("runtime-port", {
   runtimeFile: Argument.String("runtime-file"),
+  expectedVersion: Flag.String("expected-version").pipe(Flag.optional),
 }).pipe(
-  Command.withHandler(({ runtimeFile }) =>
+  Command.withHandler(({ runtimeFile, expectedVersion }) =>
     Effect.sync(() => {
       try {
         // @effect-diagnostics-next-line preferSchemaOverJson:off - mirrors the shell snippet's loose parse.
@@ -103,7 +105,12 @@ const runtimePort = Command.make("runtime-port", {
           pid?: unknown;
           port?: unknown;
           origin?: unknown;
+          serverVersion?: unknown;
         };
+        if (Option.isSome(expectedVersion) && runtime.serverVersion !== expectedVersion.value) {
+          process.exitCode = 1;
+          return;
+        }
         const pid = Number(runtime.pid);
         const port = Number(runtime.port);
         if (!Number.isInteger(pid) || pid <= 0 || !Number.isInteger(port)) {

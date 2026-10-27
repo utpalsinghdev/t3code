@@ -1,10 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
@@ -82,6 +85,173 @@ function commandArgs(command: ChildProcess.Command): ReadonlyArray<string> {
 const ARCHIVE = { archiveVersion: "1.2.3-preview.20260911.4" } as const;
 
 describe("ssh tunnel scripts", () => {
+  it.live("streams a bundled runtime over SSH and selects its boot service", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const hostPlatform = yield* HostProcess.Platform;
+      const hostArch = yield* HostProcess.Architecture;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ssh-upload-" });
+      const version = "1.2.3-local.4";
+      const platform = "linux";
+      const stem = `t3-${version}-${platform}-${hostArch}`;
+      const fixture = path.join(root, stem);
+      yield* fs.makeDirectory(fixture);
+      yield* fs.writeFileString(
+        path.join(fixture, "t3"),
+        `#!/bin/sh
+case "$1" in
+--version) printf 't3 v${version}\\n' ;;
+service) printf 'installed\\n' > "$HOME/service-installed" ;;
+__ssh-helper) if [ "$2" = runtime-port ]; then printf '%s 3773\\n' "$$"; fi ;;
+*) exit 1 ;;
+esac
+`,
+      );
+      yield* fs.chmod(path.join(fixture, "t3"), 0o755);
+      const archive = path.join(root, `${stem}.tar.gz`);
+      const tar = yield* spawner.spawn(
+        ChildProcess.make("tar", ["-czf", archive, "-C", root, stem]),
+      );
+      assert.equal(Number(yield* tar.exitCode), 0);
+      const hash = yield* spawner.spawn(
+        ChildProcess.make(hostPlatform === "darwin" ? "shasum" : "sha256sum", [
+          ...(hostPlatform === "darwin" ? ["-a", "256"] : []),
+          archive,
+        ]),
+      );
+      const checksum = yield* hash.stdout.pipe(
+        Stream.decodeText(),
+        Stream.runFold(
+          () => "",
+          (a, b) => a + b,
+        ),
+      );
+      yield* fs.writeFileString(`${archive}.sha256`, checksum);
+      const remoteHome = path.join(root, "remote");
+      yield* fs.makeDirectory(remoteHome);
+      const bin = path.join(root, "bin");
+      yield* fs.makeDirectory(bin);
+      yield* fs.writeFileString(
+        path.join(bin, "uname"),
+        `#!/bin/sh
+case "$1" in -s) printf 'Linux\\n' ;; -m) printf '${hostArch === "arm64" ? "aarch64" : "x86_64"}\\n' ;; esac
+`,
+      );
+      yield* fs.chmod(path.join(bin, "uname"), 0o755);
+      const ssh = ChildProcessSpawner.make((command) => {
+        if (command._tag !== "StandardCommand" || command.command !== "ssh")
+          return spawner.spawn(command);
+        const remoteArgs = command.args
+          .slice(command.args.indexOf("--") + 2)
+          .filter((arg) => arg !== "-l");
+        return spawner.spawn(
+          ChildProcess.make("sh", ["-c", remoteArgs.join(" ")], {
+            ...command.options,
+            env: { ...command.options.env, HOME: remoteHome, PATH: `${bin}:${process.env.PATH}` },
+            extendEnv: true,
+          }),
+        );
+      });
+      const result = yield* SshTunnel.launchOrReuseRemoteServer(
+        { alias: "fixture", hostname: "fixture", username: "fixture", port: null },
+        { batchMode: "yes" },
+        { archiveVersion: version, bundledArchiveDirectory: root },
+      ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, ssh));
+      assert.deepEqual(result, { remotePort: 3773, remoteServerKind: "external" });
+      assert.equal(
+        (yield* fs.readFileString(path.join(remoteHome, "service-installed"))).trim(),
+        "installed",
+      );
+      assert.equal(
+        (yield* fs.readFileString(
+          path.join(remoteHome, ".t3/runtime/versions", version, ".install-complete"),
+        )).trim(),
+        version,
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.live.each(["valid", "corrupt", "wrong-version"])(
+    "installs the bundled Local runtime without an upstream download: %s",
+    (scenario) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const hostPlatform = yield* HostProcess.Platform;
+        const hostArch = yield* HostProcess.Architecture;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-bundled-runtime-" });
+        const version = "1.2.3-local.4";
+        const stem = `t3-${version}-${hostPlatform === "darwin" ? "darwin" : "linux"}-${hostArch}`;
+        const runtime = path.join(root, stem);
+        const uploads = path.join(root, ".t3/runtime/uploads", version);
+        yield* fs.makeDirectory(runtime);
+        yield* fs.makeDirectory(uploads, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(runtime, "t3"),
+          `#!/bin/sh\nprintf 't3 v${scenario === "wrong-version" ? "1.2.3" : version}\\n'\n`,
+        );
+        yield* fs.chmod(path.join(runtime, "t3"), 0o755);
+        const archive = path.join(uploads, `${stem}.tar.gz`);
+        const tar = yield* spawner.spawn(
+          ChildProcess.make("tar", ["-czf", archive, "-C", root, stem]),
+        );
+        assert.equal(Number(yield* tar.exitCode), 0);
+        const hashCommand = hostPlatform === "darwin" ? "shasum" : "sha256sum";
+        const hash = yield* spawner.spawn(
+          ChildProcess.make(hashCommand, [
+            ...(hostPlatform === "darwin" ? ["-a", "256"] : []),
+            archive,
+          ]),
+        );
+        const checksum = yield* hash.stdout.pipe(
+          Stream.decodeText(),
+          Stream.runFold(
+            () => "",
+            (a, b) => a + b,
+          ),
+        );
+        yield* fs.writeFileString(
+          `${archive}.sha256`,
+          `${scenario === "corrupt" ? "0".repeat(64) : checksum.split(/\s/u)[0]}  ${stem}.tar.gz\n`,
+        );
+        const script = path.join(root, "runner.sh");
+        yield* fs.writeFileString(
+          script,
+          SshTunnel.buildRemoteT3RunnerScript({
+            archiveVersion: version,
+            bundledArchiveDirectory: root,
+            releaseBaseUrl: "http://127.0.0.1:1/no-downloads",
+          }),
+        );
+        const child = yield* spawner.spawn(
+          ChildProcess.make("sh", [script, "--version"], {
+            env: { HOME: root },
+            extendEnv: true,
+          }),
+        );
+        const stdout = yield* child.stdout.pipe(
+          Stream.decodeText(),
+          Stream.runFold(
+            () => "",
+            (a, b) => a + b,
+          ),
+        );
+        const exitCode = Number(yield* child.exitCode);
+        const installed = path.join(root, ".t3/runtime/versions", version, ".install-complete");
+        if (scenario === "valid") {
+          assert.equal(exitCode, 0);
+          assert.equal(stdout.trim(), `t3 v${version}`);
+          assert.equal((yield* fs.readFileString(installed)).trim(), version);
+        } else {
+          assert.notEqual(exitCode, 0);
+          assert.isFalse(yield* fs.exists(installed));
+        }
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it("rejects archive versions that are not a single exact version segment", () => {
     for (const archiveVersion of [
       "../other",

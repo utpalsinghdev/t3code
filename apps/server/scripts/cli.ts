@@ -118,22 +118,24 @@ const buildExeCmd = Command.make(
       const serverDir = path.join(repoRoot, "apps/server");
 
       yield* Effect.log("[cli] Building single-executable...");
-      const spawnCommand = yield* resolveSpawnCommand("vp", ["pack"]);
       yield* runCommand(
-        ChildProcess.make(spawnCommand.command, spawnCommand.args, {
-          cwd: serverDir,
-          env: {
-            ...process.env,
-            T3CODE_PACK_EXE: "1",
-            ...Option.match(config.target, {
-              onNone: () => ({}),
-              onSome: (target) => ({ T3CODE_PACK_EXE_TARGET: target }),
-            }),
+        ChildProcess.make(
+          process.execPath,
+          [path.join(repoRoot, "node_modules/vite-plus/dist/pack-bin.js")],
+          {
+            cwd: serverDir,
+            env: {
+              ...process.env,
+              T3CODE_PACK_EXE: "1",
+              ...Option.match(config.target, {
+                onNone: () => ({}),
+                onSome: (target) => ({ T3CODE_PACK_EXE_TARGET: target }),
+              }),
+            },
+            stdout: config.verbose ? "inherit" : "ignore",
+            stderr: "inherit",
           },
-          stdout: config.verbose ? "inherit" : "ignore",
-          stderr: "inherit",
-          shell: spawnCommand.shell,
-        }),
+        ),
       );
 
       // Executables reject non-builtin imports even when bundling succeeds; inspect the emitted graph.

@@ -188,6 +188,7 @@ interface BuildCliInput {
   readonly mockUpdates: Option.Option<boolean>;
   readonly mockUpdateServerPort: Option.Option<number>;
   readonly wslRuntime: Option.Option<string>;
+  readonly sshRuntimes?: Option.Option<string>;
 }
 
 function detectHostBuildPlatform(hostPlatform: string): typeof BuildPlatform.Type | undefined {
@@ -950,6 +951,7 @@ interface ResolvedBuildOptions {
   readonly mockUpdates: boolean;
   readonly mockUpdateServerPort: number | undefined;
   readonly wslRuntime: string | undefined;
+  readonly sshRuntimes: string | undefined;
 }
 
 interface StagePackageJson {
@@ -991,6 +993,8 @@ export const DESKTOP_FILE_EXCLUSIONS = [
   "!apps/desktop/prod-resources/windows-server/**/*",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
   "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
+  "!apps/desktop/prod-resources/ssh-runtimes",
+  "!apps/desktop/prod-resources/ssh-runtimes/**/*",
   "!apps/desktop/gnome-extension",
   "!apps/desktop/gnome-extension/**/*",
 ] as const;
@@ -1643,6 +1647,7 @@ const BuildEnvConfig = Config.all({
   mockUpdates: Config.Boolean("T3CODE_DESKTOP_MOCK_UPDATES").pipe(Config.withDefault(false)),
   mockUpdateServerPort: Config.String("T3CODE_DESKTOP_MOCK_UPDATE_SERVER_PORT").pipe(Config.option),
   wslRuntime: Config.String("T3CODE_DESKTOP_WSL_RUNTIME").pipe(Config.option),
+  sshRuntimes: Config.String("T3CODE_DESKTOP_SSH_RUNTIMES").pipe(Config.option),
 });
 
 const MockUpdateServerPortSchema = Schema.NumberFromString.check(
@@ -1749,6 +1754,9 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
     mockUpdates,
     mockUpdateServerPort,
     wslRuntime,
+    sshRuntimes:
+      Option.getOrUndefined(input.sshRuntimes ?? Option.none()) ??
+      Option.getOrUndefined(env.sshRuntimes),
   } satisfies ResolvedBuildOptions;
 });
 
@@ -2799,6 +2807,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
       ...(platform === "win" && wslRuntimeBundled ? WSL_RUNTIME_EXTRA_RESOURCES : []),
+      ...(/-local\.\d+$/u.test(version)
+        ? [{ from: "apps/desktop/prod-resources/ssh-runtimes", to: "ssh-runtimes" }]
+        : []),
     ],
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
@@ -2987,6 +2998,65 @@ const assertPlatformBuildResources = Effect.fn("assertPlatformBuildResources")(f
 });
 
 // The digest verifies extraction and names the cache; hash the exact archive bytes that ship.
+export class SshRuntimeArchiveError extends Schema.TaggedError<SshRuntimeArchiveError>()(
+  "SshRuntimeArchiveError",
+  { archivePath: Schema.String, reason: Schema.String },
+) {
+  override get message() {
+    return `Local SSH runtime ${this.archivePath}: ${this.reason}`;
+  }
+}
+
+export const stageSshRuntimeArchives = Effect.fn("stageSshRuntimeArchives")(function* (input: {
+  readonly sourceDirectory: string;
+  readonly destinationDirectory: string;
+  readonly version: string;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  yield* fs.makeDirectory(input.destinationDirectory, { recursive: true });
+  for (const target of ["linux-x64", "linux-arm64", "darwin-x64", "darwin-arm64"]) {
+    const stem = `t3-${input.version}-${target}`;
+    const filename = `${stem}.tar.gz`;
+    const source = path.join(input.sourceDirectory, filename);
+    if (!(yield* fs.exists(source))) {
+      if (target.startsWith("linux-")) {
+        return yield* new SshRuntimeArchiveError({
+          archivePath: source,
+          reason:
+            "build the matching Local Linux CLI archive before packaging the desktop app (--ssh-runtimes selects its directory).",
+        });
+      }
+      continue;
+    }
+    const listing = yield* spawnAndCollectOutput(ChildProcess.make("tar", ["-tzf", source]));
+    const members = parseWslRuntimeArchiveMembers(listing.stdout);
+    if (
+      listing.exitCode !== 0 ||
+      !members.includes(`${stem}/t3`) ||
+      !members.includes(`${stem}/client/index.html`) ||
+      !members.some((member) => member.startsWith(`${stem}/node_modules/`)) ||
+      members.some(
+        (member) =>
+          member.split("/").includes("..") ||
+          (!member.startsWith(`${stem}/`) && member !== stem && member !== "."),
+      )
+    ) {
+      return yield* new SshRuntimeArchiveError({
+        archivePath: source,
+        reason: "the archive does not contain a complete runtime for this Local version.",
+      });
+    }
+    const destination = path.join(input.destinationDirectory, filename);
+    yield* fs.copyFile(source, destination);
+    const hash = NodeCrypto.createHash("sha256");
+    yield* fs
+      .stream(destination)
+      .pipe(Stream.runForEach((chunk) => Effect.sync(() => hash.update(chunk))));
+    yield* fs.writeFileString(`${destination}.sha256`, `${hash.digest("hex")}  ${filename}\n`);
+  }
+});
+
 export const stageWslRuntimeArchive = Effect.fn("stageWslRuntimeArchive")(function* (input: {
   readonly sourceArchivePath: string;
   readonly archivePath: string;
@@ -3909,6 +3979,13 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     ),
     path.join(stageProdResourcesDir, "cursor-sdk"),
   );
+  if (/-local\.\d+$/u.test(appVersion)) {
+    yield* stageSshRuntimeArchives({
+      sourceDirectory: options.sshRuntimes ?? path.join(repoRoot, "release-cli"),
+      destinationDirectory: path.join(stageProdResourcesDir, "ssh-runtimes"),
+      version: appVersion,
+    });
+  }
   if (
     options.wslRuntime !== undefined &&
     bundlesWslRuntime({ platform: options.platform, runtimeArchivePath: options.wslRuntime })
@@ -4111,6 +4188,12 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   wslRuntime: Flag.String("wsl-runtime").pipe(
     Flag.withDescription(
       "Path to the Linux CLI release archive (t3-<version>-linux-x64.tar.gz) to embed as the WSL runtime of a Windows build (env: T3CODE_DESKTOP_WSL_RUNTIME).",
+    ),
+    Flag.optional,
+  ),
+  sshRuntimes: Flag.String("ssh-runtimes").pipe(
+    Flag.withDescription(
+      "Directory containing matching Local CLI archives for Linux x64 and arm64 (default: release-cli; env: T3CODE_DESKTOP_SSH_RUNTIMES).",
     ),
     Flag.optional,
   ),

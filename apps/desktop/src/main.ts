@@ -113,7 +113,14 @@ const resolveDesktopSshCliRunner = (
       nodeEngineRange: serverPackageJson.engines.node,
     };
   }
-  return { archiveVersion: environment.appVersion.replace(/-local\.\d+$/u, "") };
+  return {
+    archiveVersion: environment.appVersion,
+    ...(/-local\.\d+$/u.test(environment.appVersion)
+      ? {
+          bundledArchiveDirectory: environment.path.join(environment.resourcesPath, "ssh-runtimes"),
+        }
+      : {}),
+  };
 };
 
 const layerDesktopSshEnvironment = Layer.unwrap(

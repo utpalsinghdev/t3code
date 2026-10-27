@@ -359,6 +359,11 @@ interface ActivePiTurn {
   readonly promptMayBeCommandOnly: boolean;
   latestCompactionAfterTokens: number | null;
   lastLiveUsedTokens: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  usageMessages: number;
+  incompleteUsage: boolean;
+  hasSubagents: boolean;
   settleProbeGeneration: number;
   /** An extension may start compaction immediately after Pi emits agent_settled. */
   settleWhenIdle: boolean;
@@ -1499,6 +1504,18 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
             status: interrupted ? "interrupted" : failure !== null ? "failed" : "completed",
             completedAt,
             ...(tokenUsage === undefined ? {} : { tokenUsage }),
+            turnTokenUsage: {
+              usageScope: "main_agent",
+              usageStatus:
+                turn.usageMessages === 0
+                  ? "unavailable"
+                  : interrupted || failure !== null || turn.incompleteUsage
+                    ? "partial"
+                    : "complete",
+              hasSubagents: turn.hasSubagents,
+              inputTokens: turn.inputTokens,
+              outputTokens: turn.outputTokens,
+            },
           },
         });
         yield* updateProviderThread(
@@ -1726,6 +1743,19 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
             if (turn === null) return;
             const message = event["message"];
             if (recordString(message, "role") !== "assistant") return;
+            const usage = recordField(message, "usage");
+            const inputTokens = nonNegativeInteger(usage, "input");
+            const outputTokens = nonNegativeInteger(usage, "output");
+            if (inputTokens === undefined || outputTokens === undefined) {
+              turn.incompleteUsage = true;
+            } else {
+              turn.usageMessages += 1;
+              turn.inputTokens +=
+                inputTokens +
+                (nonNegativeInteger(usage, "cacheRead") ?? 0) +
+                (nonNegativeInteger(usage, "cacheWrite") ?? 0);
+              turn.outputTokens += outputTokens;
+            }
             yield* completeOpenStreamItems(turn);
             if (recordString(message, "stopReason") === "error" && turn.failure === null) {
               turn.failure = makeProviderFailure({
@@ -1738,6 +1768,7 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
           case "tool_execution_start":
             if (turn !== null) {
               turn.sawAgentActivity = true;
+              turn.hasSubagents ||= recordString(event, "toolName") === "subagent";
               yield* emitToolItem(turn, event, "start");
             }
             return;
@@ -2461,6 +2492,11 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
                 compactCommand !== null || (payload?.message.trimStart().startsWith("/") ?? false),
               latestCompactionAfterTokens: null,
               lastLiveUsedTokens: null,
+              inputTokens: 0,
+              outputTokens: 0,
+              usageMessages: 0,
+              incompleteUsage: false,
+              hasSubagents: false,
               settleProbeGeneration: 0,
               settleWhenIdle: false,
               sawCompaction: false,

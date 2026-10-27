@@ -42,6 +42,8 @@ import {
   resolveMergedStageDependencies,
   resolveBuildOptions,
   stageWslRuntimeArchive,
+  stageSshRuntimeArchives,
+  SshRuntimeArchiveError,
   ancestorNodeModulesPaths,
   copyDirectoryPreservingSymlinks,
   LinuxBrowserSecretHostError,
@@ -210,6 +212,45 @@ const makeWindowsPayloadFixture = Effect.fn("test.makeWindowsPayloadFixture")(fu
     appExecutableName,
   } as const;
 });
+
+it.live("ships both Local Linux runtimes with checksums and rejects a missing architecture", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "t3-local-ssh-stage-" });
+    const sourceDirectory = path.join(root, "archives");
+    const destinationDirectory = path.join(root, "staged");
+    const version = "1.2.3-local.4";
+    yield* fs.makeDirectory(sourceDirectory);
+    for (const arch of ["x64", "arm64"]) {
+      const fixture = path.join(root, arch);
+      yield* fs.makeDirectory(fixture);
+      const archive = yield* makeLinuxCliArchiveFixture({
+        root: fixture,
+        stem: `t3-${version}-linux-${arch}`,
+      });
+      yield* fs.copyFile(archive, path.join(sourceDirectory, path.basename(archive)));
+    }
+    yield* stageSshRuntimeArchives({ sourceDirectory, destinationDirectory, version });
+    for (const arch of ["x64", "arm64"]) {
+      const filename = `t3-${version}-linux-${arch}.tar.gz`;
+      const source = yield* fs.readFile(path.join(sourceDirectory, filename));
+      assert.deepEqual(yield* fs.readFile(path.join(destinationDirectory, filename)), source);
+      assert.equal(
+        yield* fs.readFileString(path.join(destinationDirectory, `${filename}.sha256`)),
+        `${NodeCrypto.createHash("sha256").update(source).digest("hex")}  ${filename}\n`,
+      );
+    }
+    yield* fs.remove(path.join(sourceDirectory, `t3-${version}-linux-arm64.tar.gz`));
+    const error = yield* stageSshRuntimeArchives({
+      sourceDirectory,
+      destinationDirectory,
+      version,
+    }).pipe(Effect.flip);
+    assert.instanceOf(error, SshRuntimeArchiveError);
+    assert.include(error.archivePath, "linux-arm64");
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
 
 it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   it.effect("rejects overlapping builds from another process until restoration finishes", () =>
