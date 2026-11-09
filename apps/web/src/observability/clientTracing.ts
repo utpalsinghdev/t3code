@@ -9,6 +9,7 @@ import { settleAsyncResult, squashAtomCommandFailure } from "@t3tools/client-run
 import { safeErrorLogAttributes } from "@t3tools/client-runtime/errors";
 import { resolvePrimaryEnvironmentHttpUrl } from "../environments/primary";
 import { releaseChannelOf, releaseResourceAttributes } from "@t3tools/shared/releaseResource";
+import { EXTERNAL_REPORTING_ENABLED } from "@t3tools/shared/externalReporting";
 import * as ClientTracer from "./clientTracer";
 import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
 import { isElectron } from "../env";
@@ -79,6 +80,8 @@ export interface ClientTracingConfig {
 }
 
 export function configureClientTracing(config: ClientTracingConfig = {}): Promise<void> {
+  if (!EXTERNAL_REPORTING_ENABLED) return Promise.resolve();
+
   if (config.exportIntervalMs === undefined && activeConfigKey !== null) {
     return pendingConfiguration;
   }

@@ -8,6 +8,8 @@ import * as Tracer from "effect/Tracer";
 import type { HttpClient } from "effect/http";
 import { OtlpSerialization, OtlpTracer } from "effect/observability";
 
+import { EXTERNAL_REPORTING_ENABLED } from "./externalReporting.ts";
+
 export interface RelayClientTracingConfig {
   readonly tracesUrl: string;
   readonly tracesDataset: string;
@@ -152,7 +154,7 @@ export function layer(
   config: RelayClientTracingConfig | null,
   resource: RelayClientTracingResource,
 ): Layer.Layer<never, never, HttpClient.HttpClient> {
-  if (config === null) {
+  if (!EXTERNAL_REPORTING_ENABLED || config === null) {
     return Layer.succeed(RelayClientTracer, Option.none());
   }
 

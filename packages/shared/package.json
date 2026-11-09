@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./externalReporting": {
+      "types": "./src/externalReporting.ts",
+      "import": "./src/externalReporting.ts"
+    },
     "./changedFileKind": {
       "types": "./src/changedFileKind.ts",
       "import": "./src/changedFileKind.ts"

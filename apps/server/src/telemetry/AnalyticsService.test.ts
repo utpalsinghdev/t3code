@@ -1,3 +1,4 @@
+import { vi } from "vite-plus/test";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -366,3 +367,6 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
     }),
   );
 });
+
+// Exercise exporter behavior separately from the Local build policy.
+vi.mock("@t3tools/shared/externalReporting", () => ({ EXTERNAL_REPORTING_ENABLED: true }));

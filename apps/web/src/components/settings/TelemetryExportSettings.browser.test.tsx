@@ -140,3 +140,6 @@ describe("TelemetryExportSettings", () => {
     });
   });
 });
+
+// Exercise exporter behavior separately from the Local build policy.
+vi.mock("@t3tools/shared/externalReporting", () => ({ EXTERNAL_REPORTING_ENABLED: true }));

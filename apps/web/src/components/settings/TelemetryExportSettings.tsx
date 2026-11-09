@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { OtlpEndpointCheckResult, OtlpSignal, ServerObservability } from "@t3tools/contracts";
+import { EXTERNAL_REPORTING_ENABLED } from "@t3tools/shared/externalReporting";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { serverEnvironment } from "../../state/server";
@@ -73,6 +74,15 @@ function endpointStatus(url: string, check: EndpointCheck | undefined) {
 
 export function TelemetryExportSettings() {
   const { environment, scope } = useSettingsScope();
+  if (!EXTERNAL_REPORTING_ENABLED) {
+    return (
+      <SettingsSection title="OpenTelemetry export" id="telemetry-export">
+        <p className="px-4 py-4 text-xs text-muted-foreground sm:px-5">
+          External analytics and diagnostic reporting are disabled in this Local build.
+        </p>
+      </SettingsSection>
+    );
+  }
   if (scope.kind !== "environment" || !environment) {
     return (
       <SettingsSection title="OpenTelemetry export" id="telemetry-export">

@@ -1,5 +1,6 @@
 // T3 ingest retains events and forwards to PostHog; UUIDs deduplicate retries there.
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import { EXTERNAL_REPORTING_ENABLED } from "@t3tools/shared/externalReporting";
 import type { ClientOs } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
@@ -96,7 +97,7 @@ export class AnalyticsService extends Context.Service<
     ) => Effect.Effect<void>;
   }
 >()("t3/telemetry/AnalyticsService") {
-  static readonly layerTest = Layer.succeed(
+  static readonly layerDisabled = Layer.succeed(
     AnalyticsService,
     AnalyticsService.of({
       record: Effect.fn("AnalyticsService.record")(function () {
@@ -108,6 +109,8 @@ export class AnalyticsService extends Context.Service<
       }),
     }),
   );
+
+  static readonly layerTest = AnalyticsService.layerDisabled;
 }
 
 function serverOsFromNodePlatform(platform: string): ClientOs {
@@ -128,6 +131,10 @@ function serverOsFromNodePlatform(platform: string): ClientOs {
 /** @public */
 /** @public */
 export const make = Effect.gen(function* () {
+  if (!EXTERNAL_REPORTING_ENABLED) {
+    return yield* AnalyticsService.pipe(Effect.provide(AnalyticsService.layerDisabled));
+  }
+
   const telemetryConfig = yield* TelemetryEnvConfig;
   const httpClient = yield* HttpClient.HttpClient;
   const serverConfig = yield* ServerConfig.ServerConfig;

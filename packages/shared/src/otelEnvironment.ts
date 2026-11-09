@@ -8,6 +8,7 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 
 import type { OtlpEndpointSource } from "@t3tools/contracts";
 
+import { EXTERNAL_REPORTING_ENABLED } from "./externalReporting.ts";
 import { OtlpHeadersFromString, OtlpProtocol, type SignalExport } from "./observability.ts";
 
 type OtlpSignalName = "TRACES" | "METRICS" | "LOGS";
@@ -347,7 +348,7 @@ export const resolveSignalEndpoint = (
   t3: { readonly url: string | undefined; readonly export: SignalExport },
   fallback: { readonly bootstrapUrl: string | undefined; readonly settingsUrl: string | undefined },
 ): SignalEndpoint | undefined => {
-  if (otel.disabled) {
+  if (!EXTERNAL_REPORTING_ENABLED || otel.disabled) {
     return undefined;
   }
   const t3Url = blankAsUnset(t3.url);

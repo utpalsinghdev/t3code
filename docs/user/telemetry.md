@@ -1,40 +1,25 @@
 # Product usage data
 
-The T3 Code server sends product usage events to T3 Code's own endpoint at `ingest.t3.codes`,
-associated with a hashed account or installation identifier. To count how many installations one person
-uses, the server also sends hashed account identifiers: your T3 Connect account, your OpenAI and
-Claude accounts when you are signed in, and a random identifier for each device that connects. The endpoint keeps a copy of each
-event and forwards events to PostHog. Events include the provider, model, reasoning effort,
-permission mode, turn result, duration, release channel, and main-agent token totals when
-available.
+This Local fork disables external analytics and diagnostic reporting in its source. It does not
+send product events to T3 Code's ingest endpoint or PostHog, account or device identifiers for
+analytics, or relay and mobile connection traces to Axiom. Web client trace reporting is disabled.
+Push notifications, Live Activities, and T3 Connect agent activity publishing remain available.
 
-Events do not include prompts, responses, file contents, authentication tokens, conversation IDs,
-raw provider events, or child-agent output. Child-agent token use is excluded from the totals.
+Server and desktop OpenTelemetry exports and endpoint checks are also disabled. Saved receiver
+URLs, environment variables, and build-time tracing credentials cannot enable reporting in this
+build. Local logs and resource diagnostics remain available.
 
-T3 Code also sends relay connection traces to Axiom to diagnose T3 Connect connectivity.
+For an older installed build, set these variables in the environment where its server runs:
 
-To disable product events and relay tracing, set `T3CODE_TELEMETRY_ENABLED=false` in the server's
-environment before starting it. Relay tracing also stops when `T3CODE_OTEL_SDK_DISABLED` or
-`OTEL_SDK_DISABLED` turns OpenTelemetry export off. The web app in a browser, including one the
-`t3` CLI opens, does not read these variables.
+```sh
+export T3CODE_TELEMETRY_ENABLED=false
+export T3CODE_OTEL_SDK_DISABLED=true
+```
 
-The desktop app reads `T3CODE_TELEMETRY_ENABLED` from your shell profile (for example `~/.zshrc`) on macOS and
-Linux, so export it there and restart the app. On Windows, set it as a user environment variable.
+On macOS and Linux, the desktop app reads these variables from your shell profile, such as
+`~/.zshrc`. Restart the app to apply them. Set them separately for remote servers. These variables
+do not disable tracing built into an older mobile app or a separately hosted web app.
 
-## Export diagnostics to your own receiver
-
-To send traces, metrics, or logs to an OpenTelemetry receiver, open
-**Settings > Maintenance > Diagnostics**, select an environment, and enter each signal's OTLP HTTP
-endpoint under **OpenTelemetry export** (for example `http://localhost:4318/v1/traces`). Save, then
-restart that environment's server. The receiver must be reachable from the server's machine.
-**Test** sends an empty export from the server to check an endpoint before or after you save it;
-saved endpoints are checked when the section opens. Checks send authentication headers only to
-the signal's currently running endpoint and do not follow redirects. To check a new endpoint
-that requires authentication, save it and restart the server first.
-
-`T3CODE_OTLP_*_URL` and standard `OTEL_EXPORTER_OTLP_*` environment variables override the saved
-settings. An overridden signal shows **Set by environment** and names the variable that set it, and its
-**Test** checks the running endpoint instead of the field. For endpoints saved here or set with `T3CODE_OTLP_*_URL`, set `T3CODE_OTLP_HEADERS` for
-receivers that need authentication and `T3CODE_OTLP_PROTOCOL=http/protobuf` for receivers that do
-not accept JSON. An endpoint set with `OTEL_EXPORTER_OTLP_*` takes its headers and protocol from
-`OTEL_EXPORTER_OTLP_HEADERS` and `OTEL_EXPORTER_OTLP_PROTOCOL` instead.
+Disabling reporting does not block connections needed for features you use, such as provider
+requests, T3 Connect, Git hosting, release checks, or external favicon requests. T3 Connect routes
+connections through its hosted service. Use direct or SSH connections to avoid that service.

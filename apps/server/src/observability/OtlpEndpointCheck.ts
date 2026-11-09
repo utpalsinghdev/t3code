@@ -4,6 +4,7 @@ import type {
   OtlpSignal,
 } from "@t3tools/contracts";
 import { layerOtlpSerialization } from "@t3tools/shared/observability";
+import { EXTERNAL_REPORTING_ENABLED } from "@t3tools/shared/externalReporting";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -38,6 +39,14 @@ const emptyExport = (
 };
 
 const make = Effect.gen(function* () {
+  if (!EXTERNAL_REPORTING_ENABLED) {
+    return OtlpEndpointCheck.of({
+      check: Effect.fn("OtlpEndpointCheck.check")(function () {
+        return Effect.succeed({ _tag: "Rejected", status: 403 });
+      }),
+    });
+  }
+
   const config = yield* ServerConfig.ServerConfig;
   const httpClient = yield* HttpClient.HttpClient;
 
