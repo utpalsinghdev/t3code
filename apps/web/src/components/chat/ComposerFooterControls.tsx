@@ -8,14 +8,12 @@ import { createModelSelection } from "@t3tools/shared/model";
 import { BotIcon, PencilRulerIcon } from "lucide-react";
 import { type ComponentProps, memo } from "react";
 
-import { cn } from "~/lib/utils";
 import type { ContextWindowSnapshot } from "../../lib/contextWindow";
 import { Select, SelectItem, SelectPopup, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   ComposerControl,
   ComposerControlIcon,
-  ComposerControlSeparator,
   type ComposerControlSize,
   ComposerSelectControl,
 } from "./ComposerControl";
@@ -155,50 +153,43 @@ export const ComposerUsageControls = memo(function ComposerUsageControls(props: 
   return (
     <div data-resting-controls-usage className="flex shrink-0 items-center gap-1">
       {props.contextWindowMeterEnabled ? (
-        <>
-          <ComposerControlSeparator size={props.size} />
-          {!props.activeContextWindow && props.reserveContextWindowMeter ? (
-            <ContextWindowMeterPlaceholder size={props.size} />
-          ) : (
-            <ContextWindowMeter
-              size={props.size}
-              hidden={props.hidden}
-              usage={props.activeContextWindow}
-            />
-          )}
-        </>
+        !props.activeContextWindow && props.reserveContextWindowMeter ? (
+          <ContextWindowMeterPlaceholder size={props.size} />
+        ) : (
+          <ContextWindowMeter
+            size={props.size}
+            hidden={props.hidden}
+            usage={props.activeContextWindow}
+          />
+        )
       ) : null}
-      <ComposerControlSeparator size={props.size} />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              tabIndex={0}
-              className={cn(
-                "inline-flex shrink-0 items-center whitespace-nowrap rounded-sm font-medium tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                props.size === "xs" ? "h-7 text-2xs sm:h-6" : "h-7 text-xs",
-                props.completedTurnTokensPerSecond === null
-                  ? "text-muted-foreground"
-                  : "text-success-foreground",
-              )}
-            />
-          }
-        >
-          {props.completedTurnTokensPerSecond === null
-            ? "-"
-            : props.completedTurnTokensPerSecond > 0 && props.completedTurnTokensPerSecond < 0.1
-              ? "<0.1"
-              : props.completedTurnTokensPerSecond.toLocaleString("en-US", {
-                  maximumFractionDigits: 1,
-                })}{" "}
-          tok/s
-        </TooltipTrigger>
-        <TooltipPopup side="top">
-          {props.completedTurnTokensPerSecond === null
-            ? "Available after a completed turn reports output tokens and timing."
-            : "Average output tokens per second for the latest completed turn, including reasoning, tool calls, and waiting. Updates when a turn completes."}
-        </TooltipPopup>
-      </Tooltip>
+      {props.completedTurnTokensPerSecond !== null ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <ComposerControl
+                render={<span />}
+                size={props.size}
+                tabIndex={0}
+                className="tabular-nums"
+              />
+            }
+          >
+            <span data-composer-control-label className="text-success-foreground">
+              {props.completedTurnTokensPerSecond > 0 && props.completedTurnTokensPerSecond < 0.1
+                ? "<0.1"
+                : props.completedTurnTokensPerSecond.toLocaleString("en-US", {
+                    maximumFractionDigits: 1,
+                  })}{" "}
+              tok/s
+            </span>
+          </TooltipTrigger>
+          <TooltipPopup side="top">
+            Average output tokens per second for the latest completed turn, including reasoning,
+            tool calls, and waiting. Updates when a turn completes.
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
     </div>
   );
 });

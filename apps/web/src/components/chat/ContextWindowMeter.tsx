@@ -1,7 +1,6 @@
-import { Button } from "../ui/button";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
-import type { ComposerControlSize } from "./ComposerControl";
+import { ComposerControl, type ComposerControlSize } from "./ComposerControl";
 import { useComposerMenuState } from "./useComposerMenuState";
 import { useComposerMenuProps } from "./composerEventScope";
 
@@ -44,9 +43,8 @@ export function ContextWindowMeter(props: {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           render={
-            <Button
-              size={size === "xs" ? "icon-xs" : "icon-sm"}
-              variant="ghost-muted"
+            <ComposerControl
+              size={size}
               aria-label={
                 usedPercentage !== null
                   ? `Context window ${usedPercentage} used. Show breakdown`
@@ -88,7 +86,10 @@ export function ContextWindowMeter(props: {
                   ) : null}
                 </svg>
               </span>
-            </Button>
+              <span data-composer-control-label className="tabular-nums">
+                {usedPercentage ?? "-"}
+              </span>
+            </ComposerControl>
           }
         />
         <PopoverPopup
@@ -136,11 +137,6 @@ export function ContextWindowMeter(props: {
           </div>
         </PopoverPopup>
       </Popover>
-      <span
-        className={`tabular-nums text-muted-foreground ${size === "xs" ? "text-2xs" : "text-xs"}`}
-      >
-        {usedPercentage ?? "-"}
-      </span>
     </div>
   );
 }
