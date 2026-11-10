@@ -80,11 +80,14 @@ describe("desktop preload bundle verifier", () => {
     );
   });
 
-  it("accepts preload registration of window event listeners", () => {
+  it("runs a preload that reads the page's DOM while loading", () => {
     assert.doesNotThrow(() =>
       verifyPreloadBundle(`
         ${validPreload}
-        window.addEventListener("DOMContentLoaded", () => {});
+        const report = () => document.fullscreenElement;
+        report();
+        document.addEventListener("fullscreenchange", report);
+        window.addEventListener("resize", report);
       `),
     );
   });
