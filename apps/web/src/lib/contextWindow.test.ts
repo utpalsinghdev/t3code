@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { OrchestrationV2ProviderTurnTokenUsage } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
+import { formatContextWindowCompactionMessage } from "../components/chat/compaction.logic";
 import * as DateTime from "effect/DateTime";
 import {
   ContextTransferId,
@@ -12,12 +13,12 @@ import {
   type OrchestrationV2ProviderTurn,
 } from "@t3tools/contracts";
 import { makeThreadProjectionFixture } from "../test-fixtures";
-import { shouldOfferResumeCompaction } from "../components/chat/ContextWindowMeter.logic";
 import {
   deriveLatestContextWindowSnapshot,
   latestCompletedTurnTokensPerSecond,
   latestProviderTurnTokenUsage,
-} from "./contextWindow";
+  shouldOfferResumeCompaction,
+} from "@t3tools/client-runtime/state/context-window";
 
 const decodeTokenUsage = Schema.decodeSync(OrchestrationV2ProviderTurnTokenUsage);
 
@@ -177,6 +178,9 @@ describe("live provider-turn usage (#8144)", () => {
     expect(snapshot?.remainingTokens).toBe(158_000);
     expect(snapshot?.usedPercentage).toBe(21);
     expect(snapshot?.autoCompactThreshold).toBe(150_000);
+    expect(formatContextWindowCompactionMessage(snapshot?.autoCompactThreshold)).toBe(
+      "Compacts automatically at about 150,000 tokens.",
+    );
   });
 });
 

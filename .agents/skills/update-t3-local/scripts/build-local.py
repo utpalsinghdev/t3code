@@ -16,6 +16,8 @@ def main():
     parser.add_argument("--resource-monitor-dir", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--temp-dir", type=Path)
+    parser.add_argument("--linux-arm64-node", type=Path)
+    parser.add_argument("--linux-library-dir", type=Path)
     args = parser.parse_args()
     if not re.fullmatch(r"\d+\.\d+\.\d+-local\.\d+", args.version):
         parser.error("--version must be a new full version such as 0.1.3-local.7")
@@ -56,14 +58,18 @@ def main():
         subprocess.run(["vp", "run", "build:desktop"], cwd=root, env=env, check=True)
         archives = output / "ssh-runtimes"
         for arch in ("x64", "arm64"):
+            extra = (["--linux-arm64-node", str(args.linux_arm64_node.resolve(strict=True))]
+                     if arch == "arm64" and args.linux_arm64_node else [])
             subprocess.run(
-                [node, "scripts/cli.ts", "build-exe", "--target", f"linux-{arch}"],
+                [node, "scripts/cli.ts", "build-exe", "--target", f"linux-{arch}", *extra],
                 cwd=root / "apps/server", env=env, check=True,
             )
             subprocess.run(
                 [node, "scripts/build-cli-archive.ts", "--platform", "linux", "--arch", arch,
                  "--version", args.version, "--resource-monitor-dir", str(monitors),
-                 "--output-dir", str(archives)], cwd=root, env=env, check=True,
+                 "--output-dir", str(archives),
+                 *(["--linux-library-dir", str(args.linux_library_dir.resolve(strict=True) / f"linux-{arch}")]
+                   if args.linux_library_dir else [])], cwd=root, env=env, check=True,
             )
     finally:
         for p, original in originals.items():

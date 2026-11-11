@@ -3,10 +3,11 @@ import type { ComponentProps } from "react";
 import { cn } from "~/lib/utils";
 
 function Shell({
-  contextStrip = false,
+  contextRow = false,
+  contextStrip = contextRow,
   className,
   ...props
-}: ComponentProps<"div"> & { contextStrip?: boolean }) {
+}: ComponentProps<"div"> & { contextStrip?: boolean; contextRow?: boolean }) {
   return (
     <div
       data-slot="composer-shell"
@@ -48,7 +49,7 @@ function Host({ className, ...props }: ComponentProps<"div">) {
         "relative z-10 w-full rounded-2xl shadow-composer after:z-1 dark:shadow-none",
         outlineClasses,
         contextSeamClasses,
-        "group-has-data-[composer-banner-surface=attached]/composer-surface:shadow-none group-has-data-[composer-banner-surface=attached]/composer-surface:after:hidden",
+        "group-has-data-[composer-banner-surface=attached]/composer-surface:shadow-none group-has-data-[composer-banner-surface=attached]/composer-surface:before:hidden group-has-data-[composer-banner-surface=attached]/composer-surface:after:hidden",
         className,
       )}
       {...props}
