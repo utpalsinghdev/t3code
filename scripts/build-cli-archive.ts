@@ -266,9 +266,24 @@ const bundleLinuxLibatomic = Effect.fn("bundleLinuxLibatomic")(function* (input:
   readonly repoRoot: string;
   readonly contentDir: string;
   readonly executablePath: string;
+  readonly libraryDirectory?: string | undefined;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  if (input.libraryDirectory !== undefined) {
+    yield* fs.makeDirectory(path.join(input.contentDir, "lib"));
+    for (const name of ["libatomic.so.1", "libatomic.so.1.LICENSE"]) {
+      yield* fs.copyFile(
+        path.join(input.libraryDirectory, name),
+        path.join(input.contentDir, "lib", name),
+      );
+    }
+    yield* runCommand(
+      ChildProcess.make("patchelf", ["--set-rpath", "$ORIGIN/lib", input.executablePath]),
+      "patchelf --set-rpath",
+    );
+    return;
+  }
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const ldd = yield* spawner.string(ChildProcess.make("ldd", [input.executablePath]));
   const source = /libatomic\.so\.1 => (\/\S+)/.exec(ldd)?.[1];
@@ -591,6 +606,7 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
   readonly outputDir: string;
   readonly resourceMonitorDir: Option.Option<string>;
   readonly notarySubmissionFile: Option.Option<string>;
+  readonly linuxLibraryDir: Option.Option<string>;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -646,7 +662,12 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
 
   const executablePath = path.join(contentDir, executableName);
   if (input.platform === "linux") {
-    yield* bundleLinuxLibatomic({ repoRoot, contentDir, executablePath });
+    yield* bundleLinuxLibatomic({
+      repoRoot,
+      contentDir,
+      executablePath,
+      libraryDirectory: Option.getOrUndefined(input.linuxLibraryDir),
+    });
   }
   // TEMPORARY one-time Node fix. Remove when fixed: https://github.com/nodejs/node/issues/67048
   if (input.platform === "linux" && input.arch === "arm64") {
@@ -727,6 +748,12 @@ const command = Command.make(
     resourceMonitorDir: Flag.String("resource-monitor-dir").pipe(
       Flag.withDescription(
         "Directory laid out like dist/resource-monitor (defaults to apps/server/dist/resource-monitor).",
+      ),
+      Flag.optional,
+    ),
+    linuxLibraryDir: Flag.String("linux-library-dir").pipe(
+      Flag.withDescription(
+        "Verified target libatomic.so.1 and its license for Linux cross-packaging.",
       ),
       Flag.optional,
     ),

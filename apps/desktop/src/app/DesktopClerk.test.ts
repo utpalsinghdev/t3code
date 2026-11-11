@@ -140,7 +140,7 @@ describe("DesktopClerk", () => {
       name: "development",
       isDevelopment: true,
       platform: "win32" as const,
-      userData: "/tmp/t3-state/electron",
+      userData: null,
     },
   ])(
     "creates the bridge before startup can yield to the event loop ($name)",
@@ -161,7 +161,7 @@ describe("DesktopClerk", () => {
       );
 
       assert.deepEqual(events, [
-        `setPath:userData:${userData}`,
+        `setPath:userData:${userData ?? NodePath.join(NodePath.resolve(clerkStateDir), "electron")}`,
         "requestSingleInstanceLock",
         "on:second-instance",
         "on:open-url",

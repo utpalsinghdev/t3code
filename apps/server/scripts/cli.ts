@@ -179,7 +179,10 @@ const buildExeCmd = Command.make(
         yield* injectLinuxArm64Sea({
           bundlePath: bootstrapPath,
           cliAssetPath: cliMainPath,
-          outputPath: path.join(serverDir, "dist-exe/t3"),
+          outputPath: path.join(
+            serverDir,
+            target === "linux-arm64" ? "dist-exe/t3-linux-arm64" : "dist-exe/t3",
+          ),
           nodeVersion: rootPackageJson.engines.node,
           nodeExecutablePath: Option.getOrUndefined(config.linuxArm64Node),
           verbose: config.verbose,
