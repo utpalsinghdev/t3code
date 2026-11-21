@@ -3432,6 +3432,66 @@ describe("PiAdapterV2", () => {
     }).pipe(Effect.scoped, Effect.provide(layerTest)),
   );
 
+  it.effect("projects update_plan results as one native todo list per turn", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakePi;
+      const { runtime, takeEvent } = yield* openRuntime(fake);
+      const providerThread = yield* runtime.ensureThread({
+        threadId: THREAD_ID,
+        modelSelection: modelSelection("default"),
+        runtimePolicy,
+      });
+      yield* startTurn(runtime, providerThread);
+      yield* fake.takeRequest("prompt");
+      yield* fake.emit({ type: "agent_start" });
+      const takePlan = Effect.fnUntraced(function* () {
+        const event = yield* takeEvent((event) => event.type === "plan.updated");
+        if (event.type !== "plan.updated") return yield* Effect.die("Expected plan event");
+        return event.plan;
+      });
+      const updatePlan = (toolCallId: string, plan: ReadonlyArray<unknown>) =>
+        Effect.gen(function* () {
+          yield* fake.emit({
+            type: "tool_execution_start",
+            toolCallId,
+            toolName: "update_plan",
+            args: { plan },
+          });
+          yield* fake.emit({
+            type: "tool_execution_end",
+            toolCallId,
+            toolName: "update_plan",
+            isError: false,
+            result: { content: [{ type: "text", text: "ok" }], details: { plan } },
+          });
+        });
+
+      yield* updatePlan("call_plan_1", [
+        { step: "Inspect", status: "completed" },
+        { step: "Implement", status: "in_progress" },
+      ]);
+      const first = yield* takePlan();
+      assert.equal(first.kind, "todo_list");
+      assert.equal(first.status, "active");
+      assert.deepEqual(
+        first.kind === "todo_list" ? first.steps.map(({ text, status }) => [text, status]) : [],
+        [
+          ["Inspect", "completed"],
+          ["Implement", "running"],
+        ],
+      );
+
+      yield* updatePlan("call_plan_2", [
+        { step: "Inspect", status: "completed" },
+        { step: "Implement", status: "completed" },
+      ]);
+      const second = yield* takePlan();
+      assert.equal(second.id, first.id);
+      assert.equal(second.nodeId, first.nodeId);
+      assert.equal(second.status, "completed");
+    }).pipe(Effect.scoped, Effect.provide(layerTest)),
+  );
+
   it.effect(
     "keeps native and MCP images available to the shared asset reader with typed results",
     () =>

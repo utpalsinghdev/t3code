@@ -25,6 +25,7 @@ import {
   type ProviderInstanceId,
   type MessageId,
   type OrchestrationV2ProviderTurnTokenUsage,
+  type PlanId,
 } from "@t3tools/contracts";
 import { PiSettings } from "../settings.ts";
 import * as Cause from "effect/Cause";
@@ -81,6 +82,7 @@ import {
 } from "./mcpInjection.ts";
 import { PI_FILE_CHANGE_TOOLS, PI_T3_SERVICE_TIER_COMMAND } from "./mcpExtensionSource.ts";
 import { PI_STANDARD_SERVICE_TIER } from "./modelCapabilities.ts";
+import { decodePiTodoList, PI_TODO_TOOL, type PiTodoList } from "./todoList.ts";
 
 export const PI_PROVIDER = ProviderDriverKind.make("pi");
 const PI_DRIVER_KIND = PI_PROVIDER;
@@ -157,8 +159,9 @@ const PiProviderCapabilitiesV2 = {
     approvalsCanOriginateFromSubagents: false,
   },
   planning: {
-    emitsPlanUpdated: false,
-    emitsTodoList: false,
+    // From the `update_plan` tool's checklist results.
+    emitsPlanUpdated: true,
+    emitsTodoList: true,
     emitsProposedPlan: false,
     supportsStructuredQuestions: true,
     planDeltasHaveItemIds: false,
@@ -397,6 +400,8 @@ interface ActivePiTurn {
   stopTreeRefs?: PiTurnTreeRefs | null;
   /** The provider/model Pi reported on its latest assistant message. */
   reportedModel?: string;
+  /** One checklist per turn; each `update_plan` result replaces its steps. */
+  todoPlanId?: PlanId;
 }
 
 interface PiTurnTreeRefs {
@@ -1365,6 +1370,77 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
           });
         });
 
+      /**
+       * Projects an `update_plan` snapshot as the turn's native todo list.
+       * Every call in a turn updates the same item. Returns false when no plan id
+       * could be allocated, so the caller shows the ordinary tool item instead.
+       */
+      const emitTodoList = Effect.fnUntraced(function* (
+        turn: ActivePiTurn,
+        todos: PiTodoList,
+        now: DateTime.Utc,
+      ) {
+        if (turn.todoPlanId === undefined) {
+          const allocated = yield* idAllocator.allocate
+            .plan({
+              threadId: turn.turnInput.threadId,
+              ...(turn.turnInput.runId === null ? {} : { runId: turn.turnInput.runId }),
+              driver: PI_PROVIDER,
+            })
+            .pipe(
+              Effect.catchTags({
+                IdAllocatorV2AllocationError: (error) =>
+                  Effect.logWarning("Could not allocate a Pi todo list.", error).pipe(
+                    Effect.as(undefined),
+                  ),
+              }),
+            );
+          if (allocated === undefined) return false;
+          turn.todoPlanId = allocated;
+        }
+        const planId = turn.todoPlanId;
+        const nativeId = `${turn.providerTurn.id}:todo`;
+        const startedAt = turn.toolStartedAt.get(nativeId) ?? now;
+        turn.toolStartedAt.set(nativeId, startedAt);
+        const base = baseItemFields(turn, nativeId, startedAt, now);
+        const explanation =
+          todos.explanation === undefined ? {} : { explanation: todos.explanation };
+        yield* emitItemNode(turn, nativeId, "todo_list", "completed", startedAt, now);
+        yield* emit({
+          type: "plan.updated",
+          driver: PI_PROVIDER,
+          plan: {
+            id: planId,
+            threadId: turn.turnInput.threadId,
+            runId: turn.turnInput.runId,
+            nodeId: base.nodeId,
+            kind: "todo_list",
+            status:
+              todos.steps.length > 0 && todos.steps.every((step) => step.status === "completed")
+                ? "completed"
+                : "active",
+            steps: [...todos.steps],
+            ...explanation,
+          },
+        });
+        yield* emit({
+          type: "turn_item.updated",
+          driver: PI_PROVIDER,
+          turnItem: {
+            ...base,
+            // Each result is a full snapshot; nothing later completes the item.
+            status: "completed",
+            completedAt: now,
+            type: "todo_list",
+            title: "Todo list",
+            planId,
+            steps: [...todos.steps],
+            ...explanation,
+          },
+        });
+        return true;
+      });
+
       const emitToolItem = Effect.fnUntraced(function* (
         turn: ActivePiTurn,
         event: PiRpcRecord,
@@ -1389,6 +1465,17 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
         const completed = phase === "end";
         const isError = event["isError"] === true;
         const resultRecord = completed ? event["result"] : event["partialResult"];
+        if (toolName === PI_TODO_TOOL && parentToolCallId === undefined) {
+          // A checklist only appears once its result validates; failures fall through as tool items.
+          if (!completed) return;
+          if (!isError) {
+            const todos = decodePiTodoList(
+              recordField(resultRecord, "details"),
+              `${turn.providerTurn.id}:todo`,
+            );
+            if (todos !== undefined && (yield* emitTodoList(turn, todos, emittedAt))) return;
+          }
+        }
         const outputText = contentText(recordField(resultRecord, "content"));
         const status = completed
           ? isError
