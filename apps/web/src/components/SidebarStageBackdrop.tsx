@@ -28,8 +28,11 @@ export function resolveEnvironmentIdentificationPillLabel(
   stageLabel: string,
 ): EnvironmentIdentificationPillLabel | null {
   const normalized = stageLabel.trim().toLowerCase();
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- release channel names
   if (normalized === "dev") return "Dev";
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- Local release channel name
   if (normalized === "local") return "Local";
+  // oxlint-disable-next-line t3code/no-untranslated-copy -- release channel names
   if (normalized === "nightly") return "Nightly";
   return null;
 }
@@ -39,7 +42,7 @@ export function useEnvironmentStageLabel(): string {
     useAtomValue(primaryServerConfigAtom)?.environment.serverVersion ?? null;
 
   return APP_STAGE_LABEL === "Local"
-    ? "Local"
+    ? APP_STAGE_LABEL
     : resolveServerBackedAppStageLabel({
         primaryServerVersion,
         fallbackStageLabel: APP_STAGE_LABEL,

@@ -1,3 +1,4 @@
+import { useGT } from "gt-react";
 import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
@@ -20,6 +21,7 @@ export function ContextWindowMeter(props: {
   hidden?: boolean;
   usage: ContextWindowSnapshot | null;
 }) {
+  const gt = useGT();
   const { usage } = props;
   const size = props.size ?? "sm";
   const [open, setOpen] = useComposerMenuState(props.hidden);
@@ -34,9 +36,9 @@ export function ContextWindowMeter(props: {
       ? "var(--color-error)"
       : "color-mix(in oklab, var(--color-muted-foreground) 72%, transparent)";
   const tokenRows = [
-    { label: "Used", value: usage?.usedTokens },
-    { label: "Maximum", value: usage?.maxTokens },
-    { label: "Remaining", value: usage?.remainingTokens },
+    { label: gt("Used"), value: usage?.usedTokens },
+    { label: gt("Maximum"), value: usage?.maxTokens },
+    { label: gt("Remaining"), value: usage?.remainingTokens },
   ];
 
   return (
@@ -48,10 +50,14 @@ export function ContextWindowMeter(props: {
               size={size}
               aria-label={
                 usedPercentage !== null
-                  ? `Context window ${usedPercentage} used. Show breakdown`
+                  ? gt("Context window {percentage} used. Show breakdown", {
+                      percentage: usedPercentage,
+                    })
                   : usage !== null
-                    ? `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used. Show breakdown`
-                    : "Context window not reported yet. Show breakdown"
+                    ? gt("Context window {tokens} tokens used. Show breakdown", {
+                        tokens: formatContextWindowTokens(usage.usedTokens),
+                      })
+                    : gt("Context window not reported yet. Show breakdown")
               }
             >
               <span
@@ -100,12 +106,14 @@ export function ContextWindowMeter(props: {
           align="center"
           padding="none"
           width="sm"
-          aria-label="Context window breakdown"
+          aria-label={gt("Context window breakdown")}
           className="text-left whitespace-normal"
         >
           <div className="flex flex-col gap-2 p-(--floating-content-inset)">
             <div className="flex items-center justify-between gap-3">
-              <div className="font-medium text-muted-foreground text-xs">Context window</div>
+              <div className="font-medium text-muted-foreground text-xs">
+                {gt("Context window")}
+              </div>
               {usedPercentage !== null ? (
                 <div className="text-secondary-label text-2xs tabular-nums">{usedPercentage}</div>
               ) : null}
@@ -117,7 +125,7 @@ export function ContextWindowMeter(props: {
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={Math.round(normalizedPercentage)}
-                aria-label="Context window usage"
+                aria-label={gt("Context window usage")}
               >
                 <div
                   className="h-full rounded-full transition-[width,background-color] duration-500 ease-out motion-reduce:transition-none"
@@ -130,7 +138,7 @@ export function ContextWindowMeter(props: {
                 <div key={label} className="contents">
                   <dt>{label}</dt>
                   <dd className="text-right font-medium tabular-nums">
-                    {value == null ? "Not reported" : value.toLocaleString("en-US")}
+                    {value == null ? gt("Not reported") : value.toLocaleString("en-US")}
                   </dd>
                 </div>
               ))}
