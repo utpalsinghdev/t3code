@@ -7,7 +7,7 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { Menu, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ComposerControl, ComposerControlIcon, type ComposerControlSize } from "./ComposerControl";
-import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import type { ContextWindowDetails } from "./ContextWindowBreakdown";
 import { ContextWindowMeter, ContextWindowMeterPlaceholder } from "./ContextWindowMeter";
 import { focusRequestedPermission, useComposerMenuProps } from "./composerEventScope";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
@@ -103,8 +103,10 @@ export const ComposerFooterModeControls = memo(function ComposerFooterModeContro
 export const ComposerUsageControls = memo(function ComposerUsageControls(props: {
   size: ComposerControlSize;
   hidden: boolean;
-  activeContextWindow: ContextWindowSnapshot | null;
+  contextWindow: ContextWindowDetails | null;
   contextWindowMeterEnabled: boolean;
+  onCompactContext?: (() => void) | undefined;
+  compactContextDisabled: boolean;
   liveTokensPerSecond: number | null;
   completedTurnTokensPerSecond: number | null;
   reserveContextWindowMeter: boolean;
@@ -115,13 +117,15 @@ export const ComposerUsageControls = memo(function ComposerUsageControls(props: 
   return (
     <div data-resting-controls-usage className="flex shrink-0 items-center gap-1">
       {props.contextWindowMeterEnabled ? (
-        !props.activeContextWindow && props.reserveContextWindowMeter ? (
+        !props.contextWindow && props.reserveContextWindowMeter ? (
           <ContextWindowMeterPlaceholder size={props.size} />
         ) : (
           <ContextWindowMeter
             size={props.size}
             hidden={props.hidden}
-            usage={props.activeContextWindow}
+            details={props.contextWindow}
+            onCompact={props.onCompactContext}
+            compactDisabled={props.compactContextDisabled}
           />
         )
       ) : null}

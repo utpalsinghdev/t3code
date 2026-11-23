@@ -222,7 +222,8 @@ import {
 } from "./ComposerAttachmentStrip";
 import { CollapsedComposerStopAction, ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerFooterPrimaryActions, ComposerUsageControls } from "./ComposerFooterControls";
-import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import { ContextWindowMeter } from "./ContextWindowMeter";
+import type { ContextWindowDetails } from "./ContextWindowBreakdown";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
 import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
 import { buildPullRequestReferenceContext } from "../pullRequest/pullRequestDetail.logic";
@@ -439,7 +440,7 @@ export interface ChatComposerProps {
   activeProjectId: ProjectId | null;
   projectName?: string | undefined;
 
-  activeContextWindow: ContextWindowSnapshot | null;
+  contextWindowDetails: ContextWindowDetails | null;
   liveTokensPerSecond: number | null;
   completedTurnTokensPerSecond: number | null;
   compactThreadUnavailable: boolean;
@@ -455,6 +456,7 @@ export interface ChatComposerProps {
   pullRequestRepository: string | null;
   threadPullRequests: ReadonlyArray<ThreadPullRequestLink> | undefined;
   restingControlsHost: HTMLDivElement | null;
+  contextStripVisible: boolean;
   restingControlsHaveLeadingContext: boolean;
   onRestingControlsVisibilityChange: (visible: boolean) => void;
   getTimelineScrollableNode: () => HTMLElement | null;
@@ -577,6 +579,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     pullRequestRepository,
     threadPullRequests,
     restingControlsHost,
+    contextStripVisible,
     restingControlsHaveLeadingContext,
     onRestingControlsVisibilityChange,
     getTimelineScrollableNode,
@@ -2727,15 +2730,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const iconOnlyBlockCount = composerControlsCollapsed
     ? restingControlsIconOnlyBlockCount
     : expandedControlsIconOnlyBlockCount;
+  // Expanded, the meter sits on the context strip opposite the branch; collapsed, it rides with the controls there.
+  const contextMeterInStrip =
+    restingControlsHost !== null && contextStripVisible && !composerControlsCollapsed;
   const composerControls = (
     <ComposerControlsBar
       usageControls={
         <ComposerUsageControls
           size={composerControlsCollapsed ? "xs" : "sm"}
           hidden={composerControlsHidden}
-          activeContextWindow={props.activeContextWindow}
-          contextWindowMeterEnabled={settings.contextWindowMeterEnabled}
+          contextWindow={props.contextWindowDetails}
+          onCompactContext={onCompactContext}
+          compactContextDisabled={compactThreadUnavailable}
           liveTokensPerSecond={props.liveTokensPerSecond}
+          contextWindowMeterEnabled={settings.contextWindowMeterEnabled && !contextMeterInStrip}
           completedTurnTokensPerSecond={props.completedTurnTokensPerSecond}
           reserveContextWindowMeter={
             props.activeThreadRuns.length > 0 &&
@@ -3765,6 +3773,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       data-chat-composer-form="true"
       {...threadContextDropTargetProps()}
     >
+      {contextMeterInStrip && settings.contextWindowMeterEnabled
+        ? createPortal(
+            <div className="flex items-center font-normal text-muted-foreground/70">
+              <ContextWindowMeter
+                size="xs"
+                details={props.contextWindowDetails}
+                onCompact={onCompactContext}
+                compactDisabled={compactThreadUnavailable}
+              />
+            </div>,
+            restingControlsHost,
+          )
+        : null}
       {composerControlsCollapsed && restingControlsHost
         ? createPortal(
             <div

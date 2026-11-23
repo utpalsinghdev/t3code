@@ -329,6 +329,7 @@ import {
 } from "./chat/PanelLayoutControls";
 import type { ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel } from "./chat/ThreadDetailsPanel";
+import type { ContextWindowDetails } from "./chat/ContextWindowBreakdown";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   resolveEffectiveEnvMode,
@@ -358,6 +359,8 @@ import { resolveThreadSyncPhase } from "../threadSync";
 import { hasAvailableCompactionProvider } from "./chat/compaction.logic";
 import {
   advanceLiveTokenRateSample,
+  countThreadActivity,
+  deriveContextWindowBreakdown,
   deriveLatestContextWindowSnapshot,
   latestCompletedTurnTokensPerSecond,
   runningProviderTurn,
@@ -1577,6 +1580,17 @@ export default function ChatView(props: ChatViewProps) {
     serverProjection?.providerTurns ?? [],
     activeProviderThread?.id,
   );
+  const contextWindowDetails: ContextWindowDetails | null = activeContextWindow
+    ? {
+        usage: activeContextWindow,
+        breakdown: deriveContextWindowBreakdown(
+          activeContextWindow,
+          serverProjection?.providerTurns ?? [],
+          activeProviderThread?.id,
+        ),
+        activity: countThreadActivity(serverVisibleTurnItems ?? []),
+      }
+    : null;
   const runningTurn = runningProviderTurn(
     serverProjection?.providerTurns ?? [],
     activeProviderThread?.id,
@@ -3915,7 +3929,7 @@ export default function ChatView(props: ChatViewProps) {
                                 activeThreadModelSelection={activeThread?.modelSelection}
                                 activeProjectId={activeProject?.id ?? null}
                                 projectName={activeProject?.title}
-                                activeContextWindow={activeContextWindow}
+                                contextWindowDetails={contextWindowDetails}
                                 liveTokensPerSecond={liveTokensPerSecond}
                                 completedTurnTokensPerSecond={completedTurnTokensPerSecond}
                                 compactThreadUnavailable={compactThreadUnavailable}
@@ -3936,6 +3950,7 @@ export default function ChatView(props: ChatViewProps) {
                                   (activeThreadShell ?? activeThread)?.pullRequests
                                 }
                                 restingControlsHost={restingComposerControlsHost}
+                                contextStripVisible={showComposerContextStrip}
                                 restingControlsHaveLeadingContext={
                                   mountComposerContextStrip &&
                                   (isGitRepo || showComposerEnvironmentIndicator)
@@ -4186,8 +4201,10 @@ export default function ChatView(props: ChatViewProps) {
                     model: activeUsageModel,
                     providers: providerStatuses,
                     sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
-                    contextWindow: activeContextWindow,
+                    contextWindow: contextWindowDetails,
                   }}
+                  onCompactContext={onComposerCompactContextStable}
+                  compactContextDisabled={compactDisabled}
                 />
 
                 <PullRequestThreadDialogHost

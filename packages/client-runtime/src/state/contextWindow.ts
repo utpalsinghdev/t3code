@@ -167,6 +167,95 @@ export function advanceLiveTokenRateSample(
   };
 }
 
+const TOOL_ITEM_TYPES = new Set([
+  "command_execution",
+  "file_change",
+  "file_search",
+  "web_search",
+  "dynamic_tool",
+  "subagent",
+]);
+
+/** User turns and tool calls in the thread so far. */
+export function countThreadActivity(
+  entries: ReadonlyArray<{ readonly item: Pick<ThreadStructureTurnItem, "type"> }>,
+): { readonly turns: number; readonly tools: number } {
+  let turns = 0;
+  let tools = 0;
+  for (const { item } of entries) {
+    if (item.type === "user_message") turns += 1;
+    else if (TOOL_ITEM_TYPES.has(item.type)) tools += 1;
+  }
+  return { turns, tools };
+}
+
+export interface ContextWindowBreakdown {
+  readonly cachedTokens: number | null;
+  readonly uncachedTokens: number | null;
+  readonly freeTokens: number | null;
+  readonly cachedPercentage: number | null;
+  readonly uncachedPercentage: number | null;
+  readonly freePercentage: number | null;
+  readonly promptCacheHitPercentage: number | null;
+  readonly averagePromptCacheHitPercentage: number | null;
+}
+
+// Providers disagree on whether `inputTokens` includes cache reads, so the prompt is used minus output.
+function promptCacheHitPercentage(
+  usage: Pick<ContextWindowSnapshot, "usedTokens" | "outputTokens" | "cachedInputTokens">,
+): number | null {
+  if (usage.cachedInputTokens == null) return null;
+  const promptTokens = usage.usedTokens - (usage.outputTokens ?? 0);
+  if (promptTokens <= 0) return null;
+  return Math.min(100, (usage.cachedInputTokens / promptTokens) * 100);
+}
+
+/**
+ * Splits the context window into cached prompt, uncached remainder, and free space, plus the
+ * prompt-cache hit rate of the latest request and its average over the provider thread's turns.
+ */
+export function deriveContextWindowBreakdown(
+  snapshot: ContextWindowSnapshot,
+  turns: ReadonlyArray<Pick<OrchestrationV2ProviderTurn, "providerThreadId" | "tokenUsage">>,
+  activeProviderThreadId: ProviderThreadId | null | undefined,
+): ContextWindowBreakdown {
+  const maxTokens =
+    snapshot.maxTokens != null && snapshot.maxTokens > 0 ? snapshot.maxTokens : null;
+  const usedTokens = Math.max(0, snapshot.usedTokens);
+  const cachedTokens =
+    snapshot.cachedInputTokens == null ? null : Math.min(usedTokens, snapshot.cachedInputTokens);
+  const uncachedTokens = cachedTokens === null ? null : usedTokens - cachedTokens;
+  const freeTokens = maxTokens === null ? null : Math.max(0, maxTokens - usedTokens);
+  const percentOfMax = (value: number | null) =>
+    value === null || maxTokens === null ? null : Math.min(100, (value / maxTokens) * 100);
+  let hitSum = 0;
+  let hitCount = 0;
+  for (const turn of turns) {
+    if (turn.tokenUsage === undefined) continue;
+    if (activeProviderThreadId != null && turn.providerThreadId !== activeProviderThreadId) {
+      continue;
+    }
+    const hit = promptCacheHitPercentage({
+      usedTokens: turn.tokenUsage.usedTokens,
+      outputTokens: turn.tokenUsage.outputTokens ?? null,
+      cachedInputTokens: turn.tokenUsage.cachedInputTokens ?? null,
+    });
+    if (hit === null) continue;
+    hitSum += hit;
+    hitCount += 1;
+  }
+  return {
+    cachedTokens,
+    uncachedTokens,
+    freeTokens,
+    cachedPercentage: percentOfMax(cachedTokens),
+    uncachedPercentage: percentOfMax(uncachedTokens),
+    freePercentage: percentOfMax(freeTokens),
+    promptCacheHitPercentage: promptCacheHitPercentage(snapshot),
+    averagePromptCacheHitPercentage: hitCount === 0 ? null : hitSum / hitCount,
+  };
+}
+
 /** Newest report by timestamp; snapshots order turns by provider thread. */
 
 /**

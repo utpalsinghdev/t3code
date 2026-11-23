@@ -14,17 +14,15 @@ import {
 } from "@t3tools/shared/usageLimits";
 import { formatDuration, limitsNotice } from "@t3tools/shared/usageLimitsCopy";
 import { Link } from "@tanstack/react-router";
-import { msg, useGT, useLocale, useMessages } from "gt-react";
+import { msg, useGT, useMessages } from "gt-react";
 import type { ReactNode } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { useNowMinute } from "../../hooks/useNowMinute";
-import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
-import { formatContextWindowTokens } from "../../lib/contextWindow";
 import { cn } from "../../lib/utils";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { formatContextWindowCompactionMessage } from "./compaction.logic";
+import { ContextWindowBreakdownCard, type ContextWindowDetails } from "./ContextWindowBreakdown";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { nextPoolReset, poolSources, resolveThreadDetailsLimits } from "./ThreadDetailsUsage.logic";
 
@@ -39,7 +37,7 @@ export interface ThreadDetailsUsageInput {
   readonly model: string | null;
   readonly providers: readonly ServerProvider[];
   readonly sources: UsageLimitSourceSnapshots;
-  readonly contextWindow: ContextWindowSnapshot | null;
+  readonly contextWindow: ContextWindowDetails | null;
 }
 
 type UsageTone = "error" | "warning" | null;
@@ -105,67 +103,24 @@ function InstanceRows({
   return limits.windows.map((window) => <LimitRow key={window.id} window={window} now={now} />);
 }
 
-/** The thread's context window. The bar fills as context is used; the tick marks auto-compaction. */
-export function ThreadDetailsContext({ usage }: { readonly usage: ContextWindowSnapshot }) {
-  const maxTokens = usage.maxTokens != null && usage.maxTokens > 0 ? usage.maxTokens : null;
-  const used =
-    maxTokens !== null && usage.usedPercentage !== null
-      ? Math.round(Math.max(0, Math.min(100, usage.usedPercentage)))
-      : null;
-  const threshold = usage.autoCompactThreshold ?? null;
-  const tick =
-    maxTokens !== null && threshold !== null && threshold > 0 && threshold < maxTokens
-      ? (threshold / maxTokens) * 100
-      : null;
+/** The thread's context window: its cached and uncached split, free space, and prompt-cache health. */
+export function ThreadDetailsContext(props: {
+  readonly details: ContextWindowDetails;
+  readonly onCompact?: (() => void) | undefined;
+  readonly compactDisabled: boolean;
+}) {
   const gt = useGT();
-  const m = useMessages();
-  const locale = useLocale();
-  const usedTokens = formatContextWindowTokens(usage.usedTokens);
   return (
     <ThreadDetailsSection
       headingId="thread-details-context-heading"
       title={gt("Context window")}
       showHeading={false}
     >
-      <div className="grid grid-cols-[auto_minmax(3rem,1fr)_auto] gap-x-3 text-xs">
-        <UsageRow
-          label={gt("Context", { $context: "context window row label" })}
-          fill={used}
-          tone={used === null ? null : used >= 90 ? "error" : used >= 80 ? "warning" : null}
-          tick={tick}
-          muted
-          value={
-            maxTokens !== null
-              ? `${usedTokens} / ${formatContextWindowTokens(maxTokens)}`
-              : usedTokens
-          }
-          ariaValue={
-            used !== null
-              ? gt("{used}% used", { used })
-              : gt("{usedTokens} tokens used", { usedTokens })
-          }
-          tooltip={
-            <>
-              <span className="text-foreground">
-                {used !== null
-                  ? gt("Context: {used}% used", { used })
-                  : gt("Context: {usedTokens} tokens used", { usedTokens })}
-              </span>
-              {maxTokens !== null ? (
-                <span className="text-muted-foreground">
-                  {gt("{used} of {max} tokens", {
-                    used: usage.usedTokens.toLocaleString(locale),
-                    max: maxTokens.toLocaleString(locale),
-                  })}
-                </span>
-              ) : null}
-              {threshold !== null && threshold > 0 ? (
-                <span className="text-muted-foreground">
-                  {formatContextWindowCompactionMessage(threshold, m)}
-                </span>
-              ) : null}
-            </>
-          }
+      <div className="px-2.5 py-1.5">
+        <ContextWindowBreakdownCard
+          details={props.details}
+          onCompact={props.onCompact}
+          compactDisabled={props.compactDisabled}
         />
       </div>
     </ThreadDetailsSection>

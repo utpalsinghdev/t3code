@@ -17,6 +17,7 @@ import {
 import { makeThreadProjectionFixture } from "../test-fixtures";
 import {
   advanceLiveTokenRateSample,
+  deriveContextWindowBreakdown,
   deriveLatestContextWindowSnapshot,
   latestCompletedTurnTokensPerSecond,
   latestProviderTurnTokenUsage,
@@ -455,5 +456,68 @@ describe("advanceLiveTokenRateSample", () => {
       advanceLiveTokenRateSample(sample, running(1_001, 1, "05", ProviderTurnId.make("turn-2")))
         ?.rate,
     ).toBeNull();
+  });
+});
+
+describe("deriveContextWindowBreakdown", () => {
+  const activeId = ProviderThreadId.make("active");
+  it("splits used context into cached and uncached prompt, with free space and cache hit rates", () => {
+    const snapshot = deriveLatestContextWindowSnapshot(
+      [],
+      decodeTokenUsage({
+        usedTokens: 443_000,
+        maxTokens: 1_000_000,
+        cachedInputTokens: 440_000,
+        outputTokens: 1_000,
+        updatedAt: "2026-10-20T12:00:00Z",
+      }),
+    )!;
+    const breakdown = deriveContextWindowBreakdown(
+      snapshot,
+      [
+        {
+          providerThreadId: activeId,
+          tokenUsage: decodeTokenUsage({
+            usedTokens: 1_100,
+            cachedInputTokens: 800,
+            outputTokens: 100,
+            updatedAt: "2026-10-20T11:00:00Z",
+          }),
+        },
+        {
+          providerThreadId: ProviderThreadId.make("retired"),
+          tokenUsage: decodeTokenUsage({
+            usedTokens: 1_000,
+            cachedInputTokens: 0,
+            updatedAt: "2026-10-20T10:00:00Z",
+          }),
+        },
+        {
+          providerThreadId: activeId,
+          tokenUsage: decodeTokenUsage({ usedTokens: 1_000, updatedAt: "2026-10-20T09:00:00Z" }),
+        },
+      ],
+      activeId,
+    );
+    expect(breakdown).toMatchObject({
+      cachedTokens: 440_000,
+      uncachedTokens: 3_000,
+      freeTokens: 557_000,
+      cachedPercentage: 44,
+      uncachedPercentage: 0.3,
+      freePercentage: 55.7,
+      averagePromptCacheHitPercentage: 80,
+    });
+    expect(breakdown.promptCacheHitPercentage).toBeCloseTo(99.55, 2);
+  });
+
+  it("reports no cache split when the provider gave no cache counts", () => {
+    const snapshot = deriveLatestContextWindowSnapshot([compactionEntry(null)])!;
+    expect(deriveContextWindowBreakdown(snapshot, [], activeId)).toMatchObject({
+      cachedTokens: null,
+      uncachedTokens: null,
+      promptCacheHitPercentage: null,
+      averagePromptCacheHitPercentage: null,
+    });
   });
 });

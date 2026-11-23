@@ -93,6 +93,8 @@ interface ThreadDetailsPanelProps extends Pick<
   ) => Promise<ProjectScriptActionResult>;
   onDeleteProjectScript: (scriptId: string) => Promise<ProjectScriptActionResult>;
   usage: ThreadDetailsUsageInput;
+  onCompactContext?: () => void;
+  compactContextDisabled?: boolean;
 }
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
@@ -325,7 +327,11 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               {visible.usage ? <ThreadDetailsUsage {...props.usage} /> : null}
 
               {visible.context && props.usage.contextWindow ? (
-                <ThreadDetailsContext usage={props.usage.contextWindow} />
+                <ThreadDetailsContext
+                  details={props.usage.contextWindow}
+                  onCompact={props.onCompactContext}
+                  compactDisabled={props.compactContextDisabled ?? true}
+                />
               ) : null}
 
               {/* Shown only when no section above has content, so an emptied card can be refilled. */}
