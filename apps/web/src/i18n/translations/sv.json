@@ -3449,6 +3449,7 @@
   "73af9dd121cb467b": "Stäng feedbackmeddelandet",
   "309748eb67307e18": "Behörigheter: {mode}. {description}",
   "d0ef8003cb23e7b6": "Behörigheter: {mode}",
+  "ea6c828f97c9e23c": "Utdatatokens per sekund för modellens aktuella svar. Uppdateras medan agenten arbetar.",
   "4aa91c06e3cc23d3": "Behörigheter",
   "e778e4f446fdf873": "Ditt nästa meddelande startar en ny session",
   "0e2f2da4f2d94785": "Agenten ser inte tidigare meddelanden i den här tråden.",

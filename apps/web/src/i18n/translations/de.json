@@ -3450,6 +3450,7 @@
   "73af9dd121cb467b": "Feedback-Hinweis schließen",
   "309748eb67307e18": "Berechtigungen: {mode}. {description}",
   "d0ef8003cb23e7b6": "Berechtigungen: {mode}",
+  "ea6c828f97c9e23c": "Ausgabe-Tokens pro Sekunde für die aktuelle Antwort des Modells. Aktualisiert sich, während der Agent arbeitet.",
   "4aa91c06e3cc23d3": "Berechtigungen",
   "e778e4f446fdf873": "Deine nächste Nachricht startet eine neue Sitzung",
   "0e2f2da4f2d94785": "Der Agent sieht frühere Nachrichten in diesem Thread nicht.",

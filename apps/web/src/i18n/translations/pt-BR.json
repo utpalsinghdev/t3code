@@ -3449,6 +3449,7 @@
   "73af9dd121cb467b": "Dispensar aviso de feedback",
   "309748eb67307e18": "Permissões: {mode}. {description}",
   "d0ef8003cb23e7b6": "Permissões: {mode}",
+  "ea6c828f97c9e23c": "Tokens de saída por segundo da resposta atual do modelo. Atualiza enquanto o agente trabalha.",
   "4aa91c06e3cc23d3": "Permissões",
   "e778e4f446fdf873": "Sua próxima mensagem inicia uma nova sessão",
   "0e2f2da4f2d94785": "O agente não verá as mensagens anteriores desta thread.",

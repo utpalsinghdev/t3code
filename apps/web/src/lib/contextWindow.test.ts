@@ -9,12 +9,14 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderThreadId,
+  ProviderTurnId,
   RunId,
   ThreadId,
   type OrchestrationV2ProviderTurn,
 } from "@t3tools/contracts";
 import { makeThreadProjectionFixture } from "../test-fixtures";
 import {
+  advanceLiveTokenRateSample,
   deriveLatestContextWindowSnapshot,
   latestCompletedTurnTokensPerSecond,
   latestProviderTurnTokenUsage,
@@ -416,5 +418,42 @@ describe("latestProviderTurnTokenUsage", () => {
     ]) {
       expect(latestProviderTurnTokenUsage([], { ...projection, contextTransfers })).toBeNull();
     }
+  });
+});
+
+describe("advanceLiveTokenRateSample", () => {
+  const turnId = ProviderTurnId.make("turn-1");
+  const running = (usedTokens: number, outputTokens: number, at: string, id = turnId) => ({
+    id,
+    providerThreadId: ProviderThreadId.make("active"),
+    ordinal: 1,
+    status: "running" as const,
+    tokenUsage: { usedTokens, outputTokens, updatedAt: `2026-10-20T12:00:${at}Z` },
+  });
+  const advance = (...turns: ReadonlyArray<ReturnType<typeof running> | null>) =>
+    turns.reduce(advanceLiveTokenRateSample, null);
+
+  it("measures output growth within one request on the provider's clock", () => {
+    expect(advance(running(1_001, 1, "00"))?.rate).toBeNull();
+    expect(advance(running(1_001, 1, "00"), running(1_201, 201, "04"))?.rate).toBe(50);
+  });
+
+  it("starts a new request on a new prompt and keeps the last speed until it grows", () => {
+    const sample = advance(
+      running(1_001, 1, "00"),
+      running(1_201, 201, "04"),
+      running(1_401, 1, "10"),
+    );
+    expect(sample?.rate).toBe(50);
+    expect(advanceLiveTokenRateSample(sample, running(1_431, 31, "11"))?.rate).toBe(30);
+  });
+
+  it("forgets the speed when the running turn ends or another turn starts", () => {
+    const sample = advance(running(1_001, 1, "00"), running(1_201, 201, "04"));
+    expect(advanceLiveTokenRateSample(sample, null)).toBeNull();
+    expect(
+      advanceLiveTokenRateSample(sample, running(1_001, 1, "05", ProviderTurnId.make("turn-2")))
+        ?.rate,
+    ).toBeNull();
   });
 });

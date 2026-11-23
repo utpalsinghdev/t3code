@@ -357,8 +357,11 @@ import { ComposerSurface } from "./chat/ComposerSurface";
 import { resolveThreadSyncPhase } from "../threadSync";
 import { hasAvailableCompactionProvider } from "./chat/compaction.logic";
 import {
+  advanceLiveTokenRateSample,
   deriveLatestContextWindowSnapshot,
   latestCompletedTurnTokensPerSecond,
+  runningProviderTurn,
+  type LiveTokenRateSample,
   hasDismissedResumeCompaction,
   latestProviderTurnTokenUsage,
   shouldOfferResumeCompaction,
@@ -1574,6 +1577,17 @@ export default function ChatView(props: ChatViewProps) {
     serverProjection?.providerTurns ?? [],
     activeProviderThread?.id,
   );
+  const runningTurn = runningProviderTurn(
+    serverProjection?.providerTurns ?? [],
+    activeProviderThread?.id,
+  );
+  const [liveTokenRateSample, setLiveTokenRateSample] = useState<LiveTokenRateSample | null>(null);
+  const nextLiveTokenRateSample = advanceLiveTokenRateSample(liveTokenRateSample, runningTurn);
+  // Each live usage report folds into the sample during render; the rate needs the previous one.
+  if (nextLiveTokenRateSample !== liveTokenRateSample) {
+    setLiveTokenRateSample(nextLiveTokenRateSample);
+  }
+  const liveTokensPerSecond = nextLiveTokenRateSample?.rate ?? null;
   const pendingBackgroundTasks = deriveThreadPendingBackgroundTasks(serverProjection);
   const activeWorkStartedAt =
     deriveActiveWorkStartedAt(activeActivityRun, activeRuntime, localDispatchStartedAt) ??
@@ -3902,6 +3916,7 @@ export default function ChatView(props: ChatViewProps) {
                                 activeProjectId={activeProject?.id ?? null}
                                 projectName={activeProject?.title}
                                 activeContextWindow={activeContextWindow}
+                                liveTokensPerSecond={liveTokensPerSecond}
                                 completedTurnTokensPerSecond={completedTurnTokensPerSecond}
                                 compactThreadUnavailable={compactThreadUnavailable}
                                 compactDisabled={compactDisabled}

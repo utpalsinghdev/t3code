@@ -440,6 +440,7 @@ export interface ChatComposerProps {
   projectName?: string | undefined;
 
   activeContextWindow: ContextWindowSnapshot | null;
+  liveTokensPerSecond: number | null;
   completedTurnTokensPerSecond: number | null;
   compactThreadUnavailable: boolean;
   compactDisabled: boolean;
@@ -2734,6 +2735,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           hidden={composerControlsHidden}
           activeContextWindow={props.activeContextWindow}
           contextWindowMeterEnabled={settings.contextWindowMeterEnabled}
+          liveTokensPerSecond={props.liveTokensPerSecond}
           completedTurnTokensPerSecond={props.completedTurnTokensPerSecond}
           reserveContextWindowMeter={
             props.activeThreadRuns.length > 0 &&

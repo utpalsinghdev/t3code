@@ -3449,6 +3449,7 @@
   "73af9dd121cb467b": "Descartar aviso de comentarios",
   "309748eb67307e18": "Permisos: {mode}. {description}",
   "d0ef8003cb23e7b6": "Permisos: {mode}",
+  "ea6c828f97c9e23c": "Tokens de salida por segundo de la respuesta actual del modelo. Se actualiza mientras el agente trabaja.",
   "4aa91c06e3cc23d3": "Permisos",
   "e778e4f446fdf873": "Tu próximo mensaje inicia una sesión nueva",
   "0e2f2da4f2d94785": "El agente no verá los mensajes anteriores de este hilo.",

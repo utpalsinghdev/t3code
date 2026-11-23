@@ -105,10 +105,13 @@ export const ComposerUsageControls = memo(function ComposerUsageControls(props: 
   hidden: boolean;
   activeContextWindow: ContextWindowSnapshot | null;
   contextWindowMeterEnabled: boolean;
+  liveTokensPerSecond: number | null;
   completedTurnTokensPerSecond: number | null;
   reserveContextWindowMeter: boolean;
 }) {
   const gt = useGT();
+  const live = props.liveTokensPerSecond !== null;
+  const tokensPerSecond = props.liveTokensPerSecond ?? props.completedTurnTokensPerSecond;
   return (
     <div data-resting-controls-usage className="flex shrink-0 items-center gap-1">
       {props.contextWindowMeterEnabled ? (
@@ -122,7 +125,7 @@ export const ComposerUsageControls = memo(function ComposerUsageControls(props: 
           />
         )
       ) : null}
-      {props.completedTurnTokensPerSecond !== null ? (
+      {tokensPerSecond !== null ? (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -134,19 +137,26 @@ export const ComposerUsageControls = memo(function ComposerUsageControls(props: 
               />
             }
           >
-            <span data-composer-control-label className="text-success-foreground">
-              {props.completedTurnTokensPerSecond > 0 && props.completedTurnTokensPerSecond < 0.1
+            <span
+              data-composer-control-label
+              className={live ? "text-info-foreground" : "text-success-foreground"}
+            >
+              {tokensPerSecond > 0 && tokensPerSecond < 0.1
                 ? "<0.1"
-                : props.completedTurnTokensPerSecond.toLocaleString("en-US", {
+                : tokensPerSecond.toLocaleString("en-US", {
                     maximumFractionDigits: 1,
                   })}{" "}
               tok/s
             </span>
           </TooltipTrigger>
           <TooltipPopup side="top">
-            {gt(
-              "Average output tokens per second for the latest completed turn, including reasoning, tool calls, and waiting. Updates when a turn completes.",
-            )}
+            {live
+              ? gt(
+                  "Output tokens per second for the model's current response. Updates while the agent works.",
+                )
+              : gt(
+                  "Average output tokens per second for the latest completed turn, including reasoning, tool calls, and waiting. Updates when a turn completes.",
+                )}
           </TooltipPopup>
         </Tooltip>
       ) : null}

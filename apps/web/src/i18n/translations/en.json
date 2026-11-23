@@ -3449,6 +3449,7 @@
   "73af9dd121cb467b": "Dismiss feedback notice",
   "309748eb67307e18": "Permissions: {mode}. {description}",
   "d0ef8003cb23e7b6": "Permissions: {mode}",
+  "ea6c828f97c9e23c": "Output tokens per second for the model's current response. Updates while the agent works.",
   "499d7a28a6ea91de": "Average output tokens per second for the latest completed turn, including reasoning, tool calls, and waiting. Updates when a turn completes.",
   "4aa91c06e3cc23d3": "Permissions",
   "e778e4f446fdf873": "Your next message starts a fresh session",

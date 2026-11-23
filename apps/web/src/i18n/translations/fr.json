@@ -3449,6 +3449,7 @@
   "73af9dd121cb467b": "Ignorer l’avis de commentaires",
   "309748eb67307e18": "Autorisations : {mode}. {description}",
   "d0ef8003cb23e7b6": "Autorisations : {mode}",
+  "ea6c828f97c9e23c": "Jetons de sortie par seconde pour la réponse en cours du modèle. Mis à jour pendant que l’agent travaille.",
   "4aa91c06e3cc23d3": "Autorisations",
   "e778e4f446fdf873": "Votre prochain message démarre une nouvelle session",
   "0e2f2da4f2d94785": "L’agent ne verra pas les messages précédents de ce fil.",

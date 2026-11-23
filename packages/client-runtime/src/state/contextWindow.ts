@@ -86,6 +86,87 @@ export function latestCompletedTurnTokensPerSecond(
   return outputTokens / (elapsedMs / 1_000);
 }
 
+type LiveRateTurn = Pick<
+  OrchestrationV2ProviderTurn,
+  "id" | "providerThreadId" | "ordinal" | "status" | "tokenUsage"
+>;
+
+/** The active provider thread's running turn, if any. */
+export function runningProviderTurn<Turn extends LiveRateTurn>(
+  turns: ReadonlyArray<Turn>,
+  activeProviderThreadId: ProviderThreadId | null | undefined,
+): Turn | null {
+  if (activeProviderThreadId == null) return null;
+  let running: Turn | null = null;
+  for (const turn of turns) {
+    if (
+      turn.providerThreadId === activeProviderThreadId &&
+      turn.status === "running" &&
+      (running === null || turn.ordinal > running.ordinal)
+    ) {
+      running = turn;
+    }
+  }
+  return running;
+}
+
+/**
+ * Output growth across one model request, timed by the provider's own usage reports.
+ * `rate` keeps the last measured speed so the label holds steady between requests.
+ */
+export interface LiveTokenRateSample {
+  readonly providerTurnId: string;
+  readonly promptTokens: number;
+  readonly baseOutputTokens: number;
+  readonly baseAt: number;
+  readonly outputTokens: number;
+  readonly at: number;
+  readonly rate: number | null;
+}
+
+/** Folds the running turn's newest live usage report into the previous sample. */
+export function advanceLiveTokenRateSample(
+  previous: LiveTokenRateSample | null,
+  turn: LiveRateTurn | null,
+): LiveTokenRateSample | null {
+  const usage = turn?.tokenUsage;
+  const outputTokens = usage?.outputTokens;
+  if (turn == null) return null;
+  if (turn.status !== "running" || usage === undefined || outputTokens == null) {
+    return previous?.providerTurnId === turn.id ? previous : null;
+  }
+  const at = Date.parse(usage.updatedAt);
+  if (!Number.isFinite(at)) return previous;
+  const promptTokens = Math.max(0, usage.usedTokens - outputTokens);
+  const sameTurn = previous !== null && previous.providerTurnId === turn.id;
+  if (sameTurn && previous.outputTokens === outputTokens && previous.at === at) return previous;
+  // Each request reports its own cumulative output against a fixed prompt; a new prompt starts a new request.
+  const sameRequest =
+    sameTurn &&
+    previous.promptTokens === promptTokens &&
+    outputTokens >= previous.outputTokens &&
+    at >= previous.at;
+  const baseOutputTokens = sameRequest ? previous.baseOutputTokens : outputTokens;
+  const baseAt = sameRequest ? previous.baseAt : at;
+  const elapsedMs = at - baseAt;
+  const generated = outputTokens - baseOutputTokens;
+  const rate =
+    elapsedMs > 0 && generated > 0
+      ? generated / (elapsedMs / 1_000)
+      : sameTurn
+        ? previous.rate
+        : null;
+  return {
+    providerTurnId: turn.id,
+    promptTokens,
+    baseOutputTokens,
+    baseAt,
+    outputTokens,
+    at,
+    rate,
+  };
+}
+
 /** Newest report by timestamp; snapshots order turns by provider thread. */
 
 /**
